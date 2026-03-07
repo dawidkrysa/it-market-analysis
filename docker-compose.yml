@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  streamlit-app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${STREAMLIT_PORT:-8501}:8501"
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-navigator}:${POSTGRES_PASSWORD:-DeepDive_2026_Secure}@db:5432/${POSTGRES_DB:-blue_ocean_db}
+
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-navigator}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-DeepDive_2026_Secure}
+      POSTGRES_DB: ${POSTGRES_DB:-blue_ocean_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-navigator} -d ${POSTGRES_DB:-blue_ocean_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

@@ -1,0 +1,26 @@
+# Python auto-generated files
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Environment files
+.env
+venv
+.venv
+env
+
+# Git files
+.git
+.gitignore
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Logs and temporary data
+logs/
+*.log
+
+# Documentation
+README.md
+.DS_Store
