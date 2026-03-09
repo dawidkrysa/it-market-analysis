@@ -1,5 +1,5 @@
 import logging
-import os
+from typing import TextIO
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from config.settings import Settings
@@ -9,15 +9,15 @@ def setup_logging():
     """Configure application logging."""
     
     # Create logs directory
-    log_dir = Path(Settings.LOG_FILE).parent
+    log_dir: Path = Path(Settings.LOG_FILE).parent
     log_dir.mkdir(parents=True, exist_ok=True)
     
     # Configure root logger
-    logger = logging.getLogger()
+    logger: logging.Logger = logging.getLogger()
     logger.setLevel(getattr(logging, Settings.LOG_LEVEL))  
     
     # Console handler
-    console_handler = logging.StreamHandler()
+    console_handler: logging.StreamHandler[TextIO] = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'

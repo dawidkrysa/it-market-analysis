@@ -1,15 +1,16 @@
 """Radar Mikro-nisz - Main Streamlit Page.
 
-Strona domowa aplikacji Streamlit, który wyświetla szczegóły dot. projektu, 
+Strona domowa aplikacji Streamlit, która wyświetla szczegóły dot. projektu
+oraz wprowadzenie do analizy rynku pracy IT.
 """
 
-
-from typing import *
 import streamlit as st
-from utils.logging_config import setup_logging
+from streamlit.delta_generator import DeltaGenerator
 
 # Podział na kolumny dla tytułu i logo
 # Proporcje [4, 1] oznaczają, że lewa kolumna jest 4 razy szersza od prawej
+col1: DeltaGenerator
+col2: DeltaGenerator
 col1, col2 = st.columns([4, 1], vertical_alignment="center")
 
 with col1:

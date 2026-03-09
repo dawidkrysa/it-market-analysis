@@ -5,9 +5,7 @@ environment-specific settings and maintain consistency across the application.
 """
 
 import os
-from typing import Optional
-from pathlib import Path
-
+from typing import Any
 
 class Settings:
     """Application settings loaded from environment variables."""
@@ -18,7 +16,7 @@ class Settings:
 
     DATABASE_URL: str = os.getenv(
         'DATABASE_URL', 
-        'postgresql://navigator:DeepDive_2026_Secure@localhost:5432/blue_ocean_db'
+        'postgresql://navigator:DeepDive_2026_Secure@db:5432/blue_ocean_db'
     )
     
     @classmethod
@@ -28,7 +26,7 @@ class Settings:
             raise ValueError("DATABASE_URL must be a valid PostgreSQL connection string.")
     
     @classmethod
-    def get_all(cls) -> dict:
+    def get_all(cls)-> dict[str, Any]:
         """Get all configuration as a dictionary."""
         return {
             key: getattr(cls, key)
