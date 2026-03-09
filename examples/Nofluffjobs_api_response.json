@@ -1,0 +1,90 @@
+{
+    "id": "asystent-ds-logistyki-link-group-Sokołów",
+    "name": "Link Group",
+    "location": {
+        "places": [
+            {
+                "country": {
+                    "code": "POL",
+                    "name": "Poland"
+                },
+                "city": "Sokołów",
+                "street": "",
+                "postalCode": "",
+                "url": "asystent-ds-logistyki-link-group-sokolow"
+            }
+        ],
+        "fullyRemote": false,
+        "covidTimeRemotely": false,
+        "hybridDesc": ""
+    },
+    "posted": 1772728378474,
+    "renewed": 1772987578474,
+    "title": "Asystent ds. Logistyki",
+    "logo": {
+        "original": "companies/logos/original/link_group_240px_20231229_095549.png",
+        "jobs_details": "companies/logos/jobs_details/link_group_240px_20231229_095549.png",
+        "jobs_listing": "companies/logos/jobs_listing/link_group_240px_20231229_095549.png",
+        "jobs_details_2x": "companies/logos/jobs_details_2x/link_group_240px_20231229_095549.png",
+        "jobs_listing_2x": "companies/logos/jobs_listing_2x/link_group_240px_20231229_095549.png",
+        "companies_details": "companies/logos/companies_details/link_group_240px_20231229_095549.png",
+        "companies_listing": "companies/logos/companies_listing/link_group_240px_20231229_095549.png",
+        "jobs_details_webp": "companies/logos/jobs_details/link_group_240px_20231229_095549.webp",
+        "jobs_listing_webp": "companies/logos/jobs_listing/link_group_240px_20231229_095549.webp",
+        "companies_details_2x": "companies/logos/companies_details_2x/link_group_240px_20231229_095549.png",
+        "companies_listing_2x": "companies/logos/companies_listing_2x/link_group_240px_20231229_095549.png",
+        "jobs_details_2x_webp": "companies/logos/jobs_details_2x/link_group_240px_20231229_095549.webp",
+        "jobs_listing_2x_webp": "companies/logos/jobs_listing_2x/link_group_240px_20231229_095549.webp",
+        "original_pixel_image": "companies/logos/original_pixel_image/link_group_240px_20231229_095549.png",
+        "companies_details_webp": "companies/logos/companies_details/link_group_240px_20231229_095549.webp",
+        "companies_listing_webp": "companies/logos/companies_listing/link_group_240px_20231229_095549.webp",
+        "companies_details_2x_webp": "companies/logos/companies_details_2x/link_group_240px_20231229_095549.webp",
+        "companies_listing_2x_webp": "companies/logos/companies_listing_2x/link_group_240px_20231229_095549.webp"
+    },
+    "category": "logistics",
+    "seniority": [
+        "Junior"
+    ],
+    "url": "asystent-ds-logistyki-link-group-sokolow",
+    "regions": [
+        "pl"
+    ],
+    "fullyRemote": false,
+    "salary": {
+        "from": 6720,
+        "to": 7560,
+        "type": "zlecenie",
+        "currency": "PLN",
+        "disclosedAt": "VISIBLE",
+        "flexibleUpperBound": false
+    },
+    "flavors": [
+        "it"
+    ],
+    "topInSearch": false,
+    "highlighted": false,
+    "help4Ua": false,
+    "reference": "KUQHGKDW",
+    "searchBoost": false,
+    "onlineInterviewAvailable": false,
+    "tiles": {
+        "values": [
+            {
+                "value": "logistics",
+                "type": "category"
+            },
+            {
+                "value": "Umiejętności organizacyjne",
+                "type": "requirement"
+            },
+            {
+                "value": "Praca z dokumentami",
+                "type": "requirement"
+            },
+            {
+                "value": "Komunikatywność",
+                "type": "requirement"
+            }
+        ]
+    }
+}

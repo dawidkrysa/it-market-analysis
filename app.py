@@ -4,9 +4,11 @@ Główny plik aplikacji Streamlit, który zarządza wieloma stronami,
 paskiem nawigacji oraz zapewnia pasek boczny dla konfiguracji projektu.
 """
 
-from typing import *
+from logging import Logger
 import streamlit as st
 import platform
+
+from streamlit.navigation.page import StreamlitPage
 from utils.logging_config import setup_logging
 
 # Konfiguracja strony
@@ -16,18 +18,18 @@ st.set_page_config(
 )
 
 # Konfiguracja logowania
-logger = setup_logging()
+logger: Logger = setup_logging()
 logger.info("Uruchomiono Radar Mikro-nisz")
 
 # Definicja stron
-strona_glowna = st.Page("pages/1_Home.py", title="Strona Główna", icon="🏠")
-strona_konkurencji = st.Page("pages/2_Konkurencja.py", title="Popyt i Podaż (Nisze)", icon="🌊")
-strona_regresji = st.Page("pages/3_Regresja.py", title="Weryfikacja Statystyczna", icon="📊")
-strona_roi = st.Page("pages/4_Kalkulator_ROI.py", title="Kalkulator Opłacalności", icon="📈")
-strona_metodologii = st.Page("pages/5_Metodologia.py", title="Metodologia i Dane", icon="⚙️")
+strona_glowna: StreamlitPage = st.Page("pages/1_Home.py", title="Strona Główna", icon="🏠")
+strona_konkurencji: StreamlitPage = st.Page("pages/2_Konkurencja.py", title="Popyt i Podaż (Nisze)", icon="🌊")
+strona_regresji: StreamlitPage = st.Page("pages/3_Regresja.py", title="Weryfikacja Statystyczna", icon="📊")
+strona_roi: StreamlitPage = st.Page("pages/4_Kalkulator_ROI.py", title="Kalkulator Opłacalności", icon="📈")
+strona_metodologii: StreamlitPage = st.Page("pages/5_Metodologia.py", title="Metodologia i Dane", icon="⚙️")
 
 # Zbudowanie menu nawigacyjnego
-pg = st.navigation(
+pg: StreamlitPage = st.navigation(
     {
         "Wprowadzenie": [strona_glowna],
         "Ekonometria i Rynek": [strona_konkurencji, strona_regresji],
