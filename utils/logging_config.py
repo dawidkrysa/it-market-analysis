@@ -1,3 +1,8 @@
+"""Logging configuration module for the application.
+
+Provides centralized logging setup with console and rotating file handlers.
+"""
+
 import logging
 from typing import TextIO
 from logging.handlers import RotatingFileHandler
@@ -6,17 +11,23 @@ from config.settings import Settings
 
 
 def setup_logging():
-    """Configure application logging."""
+    """
+    Configure application-wide logging with console and file handlers.
     
-    # Create logs directory
+    Sets up:
+    - Console handler: INFO level with basic formatting
+    - File handler: DEBUG level with detailed formatting and 10MB rotation
+    
+    Returns:
+        logging.Logger: Configured root logger instance
+    """
+    
     log_dir: Path = Path(Settings.LOG_FILE).parent
     log_dir.mkdir(parents=True, exist_ok=True)
     
-    # Configure root logger
     logger: logging.Logger = logging.getLogger()
-    logger.setLevel(getattr(logging, Settings.LOG_LEVEL))  
+    logger.setLevel(getattr(logging, Settings.LOG_LEVEL))
     
-    # Console handler
     console_handler: logging.StreamHandler[TextIO] = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_formatter = logging.Formatter(
@@ -24,10 +35,9 @@ def setup_logging():
     )
     console_handler.setFormatter(console_formatter)
     
-    # File handler with rotation
     file_handler = RotatingFileHandler(
         Settings.LOG_FILE,
-        maxBytes=10485760,  # 10MB
+        maxBytes=10485760,
         backupCount=5
     )
     file_handler.setLevel(logging.DEBUG)
@@ -36,7 +46,6 @@ def setup_logging():
     )
     file_handler.setFormatter(file_formatter)
     
-    # Add handlers
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
     
