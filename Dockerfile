@@ -7,12 +7,32 @@ RUN groupadd -r appuser && useradd -r -g appuser -m -d /home/appuser appuser
 # Set the working directory inside the container
 WORKDIR /app
 
-WORKDIR /app
-
-# Install system dependencies
+# Install system dependencies including Playwright requirements
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libc6-dev \
+    wget \
+    gnupg \
+    ca-certificates \
+    fonts-liberation \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libatspi2.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libwayland-client0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxkbcommon0 \
+    libxrandr2 \
+    xdg-utils \
     # Delete the temporary list of packages downloaded in step 1
     && rm -rf /var/lib/apt/lists/*
 
@@ -25,14 +45,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of your application code into the container
 COPY . .
 
-# Create logs
+# Create logs and set ownership
 RUN mkdir -p /app/logs && chown -R appuser:appuser /app
+
+# Switch to non-root user BEFORE installing Playwright browsers
+USER appuser
+
+# Install Playwright browsers (Chromium only for efficiency) as appuser
+RUN playwright install chromium
 
 # Expose the Streamlit port
 EXPOSE 8501
-
-# Switch to non-root user
-USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
