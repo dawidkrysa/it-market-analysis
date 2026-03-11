@@ -47,6 +47,7 @@ class JobPosting(Base):
     utworzono: Column[datetime] = Column(DateTime)
     zaktualizowano: Column[datetime] = Column(DateTime)
     scraped_at: Column[datetime] = Column(DateTime, default=datetime.now(timezone.utc))
+    data_pobrania: Column[datetime] = Column(DateTime, default=datetime.now(timezone.utc))
 
 class DatabaseHandler:
     """
@@ -96,12 +97,48 @@ class DatabaseHandler:
                     wynagrodzenie_do=job['Wynagrodzenie Do'] if job['Wynagrodzenie Do'] else None,
                     waluta=job['Waluta'],
                     utworzono=job['Utworzono'],
-                    zaktualizowano=job['Zaktualizowano']
+                    zaktualizowano=job['Zaktualizowano'],
+                    data_pobrania=datetime.now(timezone.utc)
                 )
                 session.merge(job_posting)
             session.commit()
         except Exception as e:
             session.rollback()
             raise e
+        finally:
+            session.close()
+    
+    def clear_database(self) -> int:
+        """
+        Clear all job postings from the database.
+        
+        Returns:
+            Number of deleted records
+            
+        Raises:
+            Exception: If database operation fails
+        """
+        session: Session = self.Session()
+        try:
+            count: int = session.query(JobPosting).count()
+            session.query(JobPosting).delete()
+            session.commit()
+            return count
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()
+    
+    def get_record_count(self) -> int:
+        """
+        Get the total number of job postings in the database.
+        
+        Returns:
+            Number of records in the database
+        """
+        session: Session = self.Session()
+        try:
+            return session.query(JobPosting).count()
         finally:
             session.close()
