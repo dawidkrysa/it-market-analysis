@@ -1,231 +1,196 @@
 from datetime import datetime
 from typing import Any
-import time
-import re
 import logging
+import requests
 
 from utils.db_handler import DatabaseHandler
 
 logger = logging.getLogger(__name__)
 
-
-class NoFluffJobCollector:
+class JustJoinIT:
     """
-    Scraper for NoFluffJobs.com job listings using Playwright.
+    Collector for JustJoin.it job listings using their API.
     
-    Extracts job postings for trainee and junior positions, including:
-    - Job title, company, location, seniority level
-    - Salary ranges and currency
-    - Categories and required technologies
+    Fetches job postings for junior positions from the JustJoin.it API
+    and saves them to the database.
     """
     
-    BASE_URL = "https://nofluffjobs.com"
+    API_URL = "https://justjoin.it/api/candidate-api/offers"
     
-    def __init__(self, pages_to_fetch: int = 15) -> None:
+    def __init__(self, experience_levels: str = "junior") -> None:
         """
-        Initialize scraper and fetch job listings.
+        Initialize collector and fetch job listings from JustJoin.it API.
         
         Args:
-            pages_to_fetch: Maximum number of pages to load (default: 15)
+            experience_levels: Comma-separated experience levels (default: "junior")
+                              Options: trainee, junior, mid, senior
         """
         self.__extracted_data: list[dict[str, Any]] = []
         self.__db_handler = DatabaseHandler()
         self.__db_handler.create_tables()
-
-        try:
-            from playwright.sync_api import sync_playwright
-            
-            logger.info("Starting NoFluffJobs scraper with Playwright")
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
-                context = browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                )
-                
-                self.__extracted_data = self._fetch_all_pages_playwright(context, pages_to_fetch)
-                browser.close()
-                
-        except ImportError as e:
-            logger.error(f"Playwright not installed: {e}")
-        except Exception as e:
-            logger.error(f"Error during scraping: {e}")
         
-        self.__db_handler.save_jobs(self.__extracted_data)
+        try:
+            logger.info(f"Starting JustJoin.it API collector for experience levels: {experience_levels}")
+            self.__extracted_data = self._fetch_jobs_from_api(experience_levels)
+            self.__db_handler.save_jobs(self.__extracted_data)
+            logger.info(f"Successfully saved {len(self.__extracted_data)} jobs to database")
+        except Exception as e:
+            logger.error(f"Error during JustJoin.it data collection: {e}")
     
-    def _fetch_all_pages_playwright(self, context: Any, pages_to_fetch: int) -> list[dict[str, Any]]:
+    def _fetch_jobs_from_api(self, experience_levels: str) -> list[dict[str, Any]]:
         """
-        Fetch job listings by progressively loading pages.
+        Fetch job listings from JustJoin.it API.
         
         Args:
-            context: Playwright browser context
-            pages_to_fetch: Number of pages to load
+            experience_levels: Experience levels to filter by
             
         Returns:
             List of parsed job dictionaries
         """
         parsed_jobs = []
-        page = context.new_page()
-        url = f"{self.BASE_URL}/pl/?criteria=seniority%3Dtrainee,junior&sort=newest"
         
         try:
-            page.goto(url, wait_until="networkidle", timeout=30000)
-            page.wait_for_selector('a[href*="/job/"]', timeout=10000)
-
-            for click_num in range(pages_to_fetch - 1):
+            params = {
+                "experienceLevels": experience_levels,
+                "itemsCount": 1500
+            }
+            
+            logger.info(f"Fetching jobs from {self.API_URL}")
+            response: requests.Response = requests.get(self.API_URL, params=params, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            offers = data.get("data", [])
+            
+            logger.info(f"Received {len(offers)} job offers from API")
+            
+            for offer in offers:
                 try:
-                    page.wait_for_selector('button:has-text("Pokaż kolejne oferty")', state="visible", timeout=20000)
-                    time.sleep(2)
-                    
-                    jobs_before = page.locator('a[href*="/job/"]').count()
-                    page.evaluate("""
-                        const btn = Array.from(document.querySelectorAll('button'))
-                            .find(b => b.textContent.includes('Pokaż kolejne oferty'));
-                        if (btn) btn.click();
-                    """)
-                    
-                    for i in range(15):
-                        time.sleep(2)
-                        jobs_current = page.locator('a[href*="/job/"]').count()
-                        if jobs_current > jobs_before:
-                            time.sleep(2)
-                            break
-                    else:
-                        break
-                        
+                    parsed_job_list: list[dict[str, Any]] = self._parse_offer(offer)
+                    if parsed_job_list:
+                        parsed_jobs.extend(parsed_job_list)
                 except Exception as e:
-                    logger.warning(f"Button not found or error: {e}")
-                    break
-            
-            job_links = page.locator('a[href*="/job/"]').all()
-            logger.info(f"Scraped {len(job_links)} job listings")
-            
-            for link in job_links:
-                try:
-                    href = link.get_attribute('href')
-                    job_id = href.split('/')[-1] if href else ''
-                    
-                    if any(job['ID'] == job_id for job in parsed_jobs):
-                        continue
-                    
-                    full_text = link.inner_text()
-                    lines = [line.strip() for line in full_text.split('\n') if line.strip()]
-                    
-                    title = 'Brak tytułu'
-                    try:
-                        title_elem = link.locator('h3').first
-                        if title_elem.count() > 0:
-                            title = title_elem.inner_text().strip().replace(' NOWA','')
-                        elif lines:
-                            title = lines[0].strip()
-                    except:
-                        pass
-                    
-                    company = 'Nieznana firma'
-                    try:
-                        company_elem = link.locator('h4.company-name').first
-                        if company_elem.count() > 0:
-                            company = company_elem.inner_text().strip() or 'Nieznana firma'
-                    except:
-                        pass
-                    
-                    location = 'Nieznana'
-                    try:
-                        location_elem = link.locator('nfj-posting-item-city[data-cy="location on the job offer listing"] span').first
-                        if location_elem.count() > 0:
-                            location = location_elem.inner_text().strip() or 'Nieznana'
-                    except:
-                        pass
-                    
-                    salary_from, salary_to, currency = '', '', ''
-                    try:
-                        salary_elem = link.locator('span[data-cy="salary ranges on the job offer listing"]').first
-                        if salary_elem.count() > 0:
-                            salary_text = salary_elem.inner_text().strip()
-                            salary_match = re.search(r'(\d+(?:[\s\xa0]\d+)*)\s*[–-]\s*(\d+(?:[\s\xa0]\d+)*)\s*(PLN|EUR|USD)', salary_text)
-                            if salary_match:
-                                salary_from_str = salary_match.group(1).replace(' ', '').replace('\xa0', '')
-                                salary_to_str = salary_match.group(2).replace(' ', '').replace('\xa0', '')
-                                currency = salary_match.group(3).strip()
-                                
-                                multiplier = 1000 if 'k' in salary_text.lower() and len(salary_from_str) <= 3 else 1
-                                try:
-                                    salary_from = int(salary_from_str) * multiplier
-                                    salary_to = int(salary_to_str) * multiplier
-                                except ValueError:
-                                    salary_from, salary_to, currency = '', '', ''
-                    except:
-                        pass
-                    
-                    category = ''
-                    technologies = []
-                    
-                    try:
-                        tag_elements = link.locator('span[data-cy="category name on the job offer listing"]').all()
-                        
-                        category_keywords = [
-                            'JavaScript', 'Python', 'Java', 'PHP', 'Ruby', 'C#', 'C++', 'Go', 'Rust', 'TypeScript',
-                            'Frontend', 'Backend', 'Fullstack', 'DevOps', 'Mobile', 'Testing', 'QA', 'Tester',
-                            'Data', 'Analytics', 'Security', 'Support', 'Admin', 'Project Manager', 'Scrum Master',
-                            'Product', 'Design', 'UX', 'UI', 'Business', 'Sales', 'Marketing', 'Content',
-                            'HR', 'Finanse', 'Finance', 'Accounting', 'Księgowość', 'Logistyka', 'Logistics',
-                            'Customer', 'Service', 'Manager', 'Analyst', 'Consultant', 'Specialist'
-                        ]
-                        
-                        for tag_elem in tag_elements:
-                            tag_text = tag_elem.inner_text().strip()
-                            
-                            if not category:
-                                for keyword in category_keywords:
-                                    if keyword.lower() in tag_text.lower():
-                                        category = tag_text
-                                        break
-                            
-                            if tag_text != category:
-                                technologies.append(tag_text)
-                    except:
-                        pass
-                    
-                    technologies_str = ', '.join(technologies) if technologies else ''
-                    
-                    seniority = 'Junior'
-                    full_text_lower = full_text.lower()
-                    if 'trainee' in full_text_lower:
-                        seniority = 'Trainee'
-                    elif 'junior' in full_text_lower:
-                        seniority = 'Junior'
-                    elif 'mid' in full_text_lower:
-                        seniority = 'Mid'
-                    elif 'senior' in full_text_lower:
-                        seniority = 'Senior'
-                    
-                    utworzono = zaktualizowano = datetime.now()
-                    
-                    parsed_jobs.append({
-                        "ID": job_id,
-                        "Stanowisko": title,
-                        "Firma": company,
-                        "Poziom": seniority,
-                        "Kategoria": category,
-                        "Technologie": technologies_str,
-                        "Lokalizacja": location,
-                        "Wynagrodzenie Od": salary_from,
-                        "Wynagrodzenie Do": salary_to,
-                        "Waluta": currency,
-                        "Utworzono": utworzono,
-                        "Zaktualizowano": zaktualizowano
-                    })
-                except:
+                    logger.warning(f"Error parsing offer {offer.get('guid', 'unknown')}: {e}")
                     continue
             
-            logger.info(f"Successfully parsed {len(parsed_jobs)} unique jobs")
+            logger.info(f"Successfully parsed {len(parsed_jobs)} jobs")
             
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching data from API: {e}")
         except Exception as e:
-            logger.error(f"Error loading page: {e}")
-        finally:
-            page.close()
+            logger.error(f"Unexpected error: {e}")
         
         return parsed_jobs
+    
+    def _parse_offer(self, offer: dict[str, Any]) -> list[dict[str, Any]]:
+        """
+        Parse a single job offer from JustJoin.it API response.
+        Creates separate entries for each location if multiple locations exist.
         
+        Args:
+            offer: Job offer dictionary from API
+            
+        Returns:
+            List of parsed job dictionaries (one per location), or empty list if parsing fails
+        """
+        try:
+            # Extract basic information
+            base_slug = offer.get("slug", "")
+            if not base_slug:
+                return []
+            
+            title = offer.get("title", "Brak tytułu")
+            company = offer.get("companyName", "Nieznana firma")
+            
+            # Map experience level
+            experience_level = offer.get("experienceLevel", "junior")
+            seniority_map = {
+                "trainee": "Trainee",
+                "junior": "Junior",
+                "mid": "Mid",
+                "senior": "Senior"
+            }
+            seniority = seniority_map.get(experience_level.lower(), "Junior")
+            
+            # Extract category
+            category_data = offer.get("category", {})
+            category = category_data.get("key", "") if category_data else ""
+            
+            # Get all locations - create separate entry for each
+            locations = offer.get("locations", [])
+            if not locations:
+                # Fallback to main city if no locations array
+                locations = [{"city": offer.get("city", "Nieznana"), "slug": base_slug}]
+            
+            # Handle remote work
+            workplace_type = offer.get("workplaceType", "")
+            
+            # Extract technologies from required skills
+            required_skills = offer.get("requiredSkills", [])
+            technologies = [skill.get("name", "") for skill in required_skills if skill.get("name")]
+            technologies_str = ", ".join(technologies) if technologies else ""
+            
+            # Extract salary information - prefer PLN currency
+            employment_types = offer.get("employmentTypes", [])
+            salary_from, salary_to, currency = None, None, ""
+            
+            # Try to find PLN salary first
+            for emp_type in employment_types:
+                if emp_type.get("currency") == "PLN" and emp_type.get("currencySource") == "original":
+                    salary_from = emp_type.get("from")
+                    salary_to = emp_type.get("to")
+                    currency = "PLN"
+                    break
+            
+            # If no PLN found, use first available with salary data
+            if not currency:
+                for emp_type in employment_types:
+                    if emp_type.get("from") or emp_type.get("to"):
+                        salary_from = emp_type.get("from")
+                        salary_to = emp_type.get("to")
+                        currency = emp_type.get("currency", "")
+                        break
+            
+            # Parse dates
+            published_at = offer.get("publishedAt")
+            last_published_at = offer.get("lastPublishedAt")
+            
+            utworzono = datetime.fromisoformat(published_at.replace('Z', '+00:00')) if published_at else datetime.now()
+            zaktualizowano = datetime.fromisoformat(last_published_at.replace('Z', '+00:00')) if last_published_at else utworzono
+            
+            # Create separate job entry for each location
+            parsed_jobs = []
+            for loc in locations:
+                location_city = loc.get("city", "Nieznana")
+                location_slug = loc.get("slug", base_slug)
+                
+                # Add remote indicator if applicable
+                if workplace_type == "remote":
+                    location_display = f"{location_city} (Remote)" if location_city != "Nieznana" else "Remote"
+                else:
+                    location_display = location_city
+                
+                parsed_jobs.append({
+                    "ID": location_slug,
+                    "Stanowisko": title,
+                    "Firma": company,
+                    "Poziom": seniority,
+                    "Kategoria": category,
+                    "Technologie": technologies_str,
+                    "Lokalizacja": location_display,
+                    "Wynagrodzenie Od": salary_from,
+                    "Wynagrodzenie Do": salary_to,
+                    "Waluta": currency,
+                    "Utworzono": utworzono,
+                    "Zaktualizowano": zaktualizowano
+                })
+            
+            return parsed_jobs
+            
+        except Exception as e:
+            logger.error(f"Error parsing offer: {e}")
+            return []
+    
     def getData(self) -> list[dict[str, Any]]:
         """Return extracted job data."""
         return self.__extracted_data
