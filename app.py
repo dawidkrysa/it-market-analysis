@@ -13,7 +13,6 @@ from utils.logging_config import setup_logging
 
 st.set_page_config(
     page_title="Analiza Rynku IT: Nisze vs Mainstream",
-    layout="wide"
 )
 
 logger: Logger = setup_logging()
