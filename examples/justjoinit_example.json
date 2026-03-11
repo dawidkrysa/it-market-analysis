@@ -1,0 +1,163 @@
+{
+    "data": [      
+        {
+            "guid": "4c498c84-d2f5-47b1-b993-4d43a58b87e5",
+            "slug": "epam-systems-automated-testing-in-python-trainee-krakow-testing",
+            "title": "Automated Testing in Python Trainee",
+            "workplaceType": "remote",
+            "workingTime": "internship",
+            "experienceLevel": "junior",
+            "category": {
+                "key": "testing",
+                "parentKey": null
+            },
+            "city": "Kraków",
+            "street": "-",
+            "latitude": 50.06465009999999,
+            "longitude": 19.9449799,
+            "isRemoteInterview": false,
+            "companyName": "EPAM Systems",
+            "companyLogoThumbUrl": "https://imgproxy.justjoinit.tech/ZVKXog7e4Fi-XIADeB7xrvagj8a_QT6Uxbr7KBi-mmw/h:200/w:200/plain/https://public.justjoin.it/companies/logos/original/8b1cf467aa77e07c48bdc1666c5a009ecc37e448.png",
+            "publishedAt": "2026-03-11T16:00:05.2007613Z",
+            "isOpenToHireUkrainians": false,
+            "locations": [
+                {
+                    "city": "Kraków",
+                    "street": "-",
+                    "latitude": 50.06465009999999,
+                    "longitude": 19.9449799,
+                    "slug": "epam-systems-automated-testing-in-python-trainee-krakow-testing"
+                },
+                {
+                    "city": "Gdańsk",
+                    "street": "-",
+                    "latitude": 54.35202520000001,
+                    "longitude": 18.6466384,
+                    "slug": "epam-systems-automated-testing-in-python-trainee-gdansk-testing"
+                },
+                {
+                    "city": "Wrocław",
+                    "street": "-",
+                    "latitude": 51.10929480000001,
+                    "longitude": 17.0386019,
+                    "slug": "epam-systems-automated-testing-in-python-trainee-wroclaw-testing"
+                }
+            ],
+            "employmentTypes": [
+                {
+                    "from": null,
+                    "fromPerUnit": null,
+                    "to": null,
+                    "toPerUnit": null,
+                    "currency": "GBP",
+                    "currencySource": "conversion",
+                    "type": "internship",
+                    "unit": "month",
+                    "gross": true
+                },
+                {
+                    "from": null,
+                    "fromPerUnit": null,
+                    "to": null,
+                    "toPerUnit": null,
+                    "currency": "CHF",
+                    "currencySource": "conversion",
+                    "type": "internship",
+                    "unit": "month",
+                    "gross": true
+                },
+                {
+                    "from": null,
+                    "fromPerUnit": null,
+                    "to": null,
+                    "toPerUnit": null,
+                    "currency": "EUR",
+                    "currencySource": "conversion",
+                    "type": "internship",
+                    "unit": "month",
+                    "gross": true
+                },
+                {
+                    "from": null,
+                    "fromPerUnit": null,
+                    "to": null,
+                    "toPerUnit": null,
+                    "currency": "USD",
+                    "currencySource": "conversion",
+                    "type": "internship",
+                    "unit": "month",
+                    "gross": true
+                },
+                {
+                    "from": null,
+                    "fromPerUnit": null,
+                    "to": null,
+                    "toPerUnit": null,
+                    "currency": "PLN",
+                    "currencySource": "original",
+                    "type": "internship",
+                    "unit": "month",
+                    "gross": true
+                }
+            ],
+            "requiredSkills": [
+                {
+                    "name": "Testing Theory",
+                    "level": 2
+                },
+                {
+                    "name": "Testing Processes",
+                    "level": 2
+                },
+                {
+                    "name": "UI testing",
+                    "level": 1
+                },
+                {
+                    "name": "Databases",
+                    "level": 1
+                },
+                {
+                    "name": "API",
+                    "level": 1
+                },
+                {
+                    "name": "Automated Testing in Python",
+                    "level": 2
+                },
+                {
+                    "name": "Test automation frameworks",
+                    "level": 1
+                },
+                {
+                    "name": "Python Core",
+                    "level": 2
+                }
+            ],
+            "niceToHaveSkills": [],
+            "languages": [
+                {
+                    "code": "en",
+                    "level": "B2"
+                }
+            ],
+            "isPromoted": false,
+            "isSuperOffer": false,
+            "applyMethod": "external",
+            "lastPublishedAt": "2026-02-19T15:50:24.333865Z",
+            "expiredAt": "2026-05-20T20:59:59.999Z"
+        }
+    ],
+    "meta": {
+        "from": 0,
+        "totalItems": 483,
+        "prev": {
+            "cursor": null,
+            "itemsCount": 10
+        },
+        "next": {
+            "cursor": 10,
+            "itemsCount": 10
+        }
+    }
+}
