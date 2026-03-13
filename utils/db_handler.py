@@ -9,7 +9,27 @@ from typing import Any
 from sqlalchemy.orm.session import Session
 from config.settings import Settings
 
+import enum
+from sqlalchemy import Enum as SQLEnum
+
 Base = declarative_base()
+
+class SeniorityLevel(enum.Enum):
+    TRAINEE = "TRAINEE"
+    JUNIOR = "JUNIOR"
+    MID = "MID"
+    SENIOR = "SENIOR"
+
+class Currency(enum.Enum):
+    PLN = "PLN"
+    EUR = "EUR"
+    USD = "USD"
+
+class Source(enum.Enum):
+    JUSTJOINIT = "JUSTJOINIT"
+    NOFLUFFJOBS = "NOFLUFFJOBS"
+    THEPROTOCOLIT = "THEPROTOCOLIT"
+    MANUAL = "MANUAL"
 
 class JobPosting(Base):
     """
@@ -30,6 +50,7 @@ class JobPosting(Base):
         utworzono: Job creation date
         zaktualizowano: Job last update date
         scraped_at: Timestamp when data was scraped
+        source: Source of the job posting (e.g., "justjoinit")
     """
     __tablename__: str = 'job_postings'
     
@@ -37,17 +58,18 @@ class JobPosting(Base):
     group_id: Column[str] = Column(String)
     stanowisko: Column[str] = Column(Text)
     firma: Column[str] = Column(Text)
-    poziom: Column[str] = Column(Text)
+    poziom: Column[str] = Column(SQLEnum(SeniorityLevel), nullable=True)
     kategoria: Column[str] = Column(Text)
     technologie: Column[str] = Column(Text)
     lokalizacja: Column[str] = Column(Text)
     wynagrodzenie_od: Column[int] = Column(Integer)
     wynagrodzenie_do: Column[int] = Column(Integer)
-    waluta: Column[str] = Column(String)
+    waluta: Column[str] = Column(SQLEnum(Currency), nullable=True)
     utworzono: Column[datetime] = Column(DateTime)
     zaktualizowano: Column[datetime] = Column(DateTime)
     scraped_at: Column[datetime] = Column(DateTime, default=datetime.now(timezone.utc))
     data_pobrania: Column[datetime] = Column(DateTime, default=datetime.now(timezone.utc))
+    source: Column[str] = Column(SQLEnum(Source), nullable=True)
 
 class DatabaseHandler:
     """
@@ -98,7 +120,8 @@ class DatabaseHandler:
                     waluta=job['Waluta'],
                     utworzono=job['Utworzono'],
                     zaktualizowano=job['Zaktualizowano'],
-                    data_pobrania=datetime.now(timezone.utc)
+                    data_pobrania=datetime.now(timezone.utc),
+                    source=job['Source'].strip().upper() if job.get('Source') else None
                 )
                 session.merge(job_posting)
             session.commit()
