@@ -42,10 +42,10 @@ st.divider()
 
 # Data fetching
 st.markdown("### Pobieranie danych")
-st.write("Pobierz najnowsze oferty pracy z portalu **JustJoin.it** dla poziomu Junior.")
+st.write("Pobierz najnowsze oferty pracy z portalów  dla poziomu Junior.")
 
 if st.button("Pobierz dane", type="primary", use_container_width=True):
-    with st.spinner("Trwa pobieranie danych z JustJoin.it..."):
+    with st.spinner("Trwa pobieranie danych..."):
         try:
             manager = ScraperManager()
             
