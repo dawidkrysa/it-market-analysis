@@ -8,8 +8,11 @@ from typing import TextIO
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from config.settings import Settings
+import streamlit as st
+import sys
 
 
+@st.cache_resource
 def setup_logging():
     """
     Configure application-wide logging with console and file handlers.
@@ -26,12 +29,22 @@ def setup_logging():
     log_dir.mkdir(parents=True, exist_ok=True)
     
     logger: logging.Logger = logging.getLogger()
+
+    # Close and clear handlers so we don't double-log on Streamlit hot reloads.
+    for handler in list(logger.handlers):
+        try:
+            handler.close()
+        except Exception:
+            pass
+    logger.handlers.clear()
+
+    logger.propagate = False
     logger.setLevel(getattr(logging, Settings.LOG_LEVEL))
-    
-    console_handler: logging.StreamHandler[TextIO] = logging.StreamHandler()
+
+    console_handler: logging.StreamHandler[TextIO] = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        '%(asctime)s - %(process)d - %(threadName)s - %(name)s - %(levelname)s - %(message)s'
     )
     console_handler.setFormatter(console_formatter)
     
@@ -42,7 +55,7 @@ def setup_logging():
     )
     file_handler.setLevel(logging.DEBUG)
     file_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+        '%(asctime)s - %(process)d - %(threadName)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
     )
     file_handler.setFormatter(file_formatter)
     

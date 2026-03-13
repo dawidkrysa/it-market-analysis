@@ -16,7 +16,6 @@ st.set_page_config(
 )
 
 logger: Logger = setup_logging()
-logger.info("Uruchomiono Radar Mikro-nisz")
 
 strona_glowna: StreamlitPage = st.Page("pages/1_Home.py", title="Strona Główna", icon="🏠")
 strona_konkurencji: StreamlitPage = st.Page("pages/2_Konkurencja.py", title="Popyt i Podaż (Nisze)", icon="🌊")
