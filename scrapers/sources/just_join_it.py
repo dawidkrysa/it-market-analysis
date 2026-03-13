@@ -68,10 +68,9 @@ class JustJoinIT(BaseScraper):
         base_slug = offer.get("slug", "")
         if not base_slug: return []
 
-        # Mapping seniority
-        experience_level = offer.get("experienceLevel", "junior")
-        seniority_map = {"trainee": "Trainee", "junior": "Junior", "mid": "Mid", "senior": "Senior"}
-        seniority = seniority_map.get(experience_level.lower(), "Junior")
+        # Seniority
+        seniority = offer.get("experienceLevel", "Junior").strip().upper()
+        logger.info(f"Parsing offer {base_slug} with seniority {seniority}")
 
         # Dates
         published_at = offer.get("publishedAt")
@@ -104,6 +103,7 @@ class JustJoinIT(BaseScraper):
                 "Wynagrodzenie Do": salary_to,
                 "Waluta": currency,
                 "Utworzono": utworzono,
-                "Zaktualizowano": utworzono
+                "Zaktualizowano": utworzono,
+                "Source": self.source_name
             })
         return results
