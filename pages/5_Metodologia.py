@@ -7,7 +7,7 @@ Umożliwia pobieranie ofert pracy z JustJoin.it oraz czyszczenie bazy danych.
 
 import streamlit as st
 import pandas as pd
-from utils.job_pages import JustJoinIT
+from scrapers.scraper_manager import ScraperManager
 from utils.db_handler import DatabaseHandler
 
 st.title("Metodologia i Dane")
@@ -47,9 +47,15 @@ st.write("Pobierz najnowsze oferty pracy z portalu **JustJoin.it** dla poziomu J
 if st.button("Pobierz dane", type="primary", use_container_width=True):
     with st.spinner("Trwa pobieranie danych z JustJoin.it..."):
         try:
-            jji_result: JustJoinIT = JustJoinIT(experience_levels="junior")
-            jji_df: pd.DataFrame = pd.DataFrame(jji_result.getData())
-            st.session_state.fetch_success_message = f"Pomyślnie przetworzono i zapisano {len(jji_df)} ofert!"
+            manager = ScraperManager()
+            
+            all_jobs = manager.run_all(experience_level="junior")
+
+            if all_jobs:
+                db_handler.save_jobs(all_jobs)
+                st.session_state.fetch_success_message = f"Pomyślnie przetworzono i zapisano {len(all_jobs)} ofert!"
+            else:
+                st.warning("Nie znaleziono żadnych ofert do zapisania.")
             st.rerun()
         except Exception as e:
             st.error("Wystąpił błąd podczas pobierania danych.")
