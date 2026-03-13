@@ -1,6 +1,7 @@
 import logging
 from typing import List, Dict, Any
-from .sources.just_join_it import JustJoinIT
+from .sources.justjoinit import JustJoinIT
+from .sources.theprotocolit import TheProtocolIT
 
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,7 @@ class ScraperManager:
         """
         self._scrapers = {
             "justjoinit": JustJoinIT,
+            "theprotocolit": TheProtocolIT
         }
 
     def run_all(self, experience_level: str = "junior") -> List[Dict[str, Any]]:
