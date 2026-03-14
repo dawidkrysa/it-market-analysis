@@ -92,7 +92,7 @@ class DatabaseHandler:
         """Create all database tables if they don't exist."""
         Base.metadata.create_all(self.engine)
     
-    def save_jobs(self, jobs_data: list[dict[str, Any]]) -> None:
+    def save_jobs(self, jobs_data: list[dict[str, Any]]) -> int:
         """
         Save or update job postings in the database.
         
@@ -100,6 +100,9 @@ class DatabaseHandler:
         
         Args:
             jobs_data: List of job dictionaries with required fields
+            
+        Returns:
+            Number of jobs processed
             
         Raises:
             Exception: If database operation fails
@@ -125,6 +128,7 @@ class DatabaseHandler:
                 )
                 session.merge(job_posting)
             session.commit()
+            return len(jobs_data)
         except Exception as e:
             session.rollback()
             raise e
@@ -163,5 +167,37 @@ class DatabaseHandler:
         session: Session = self.Session()
         try:
             return session.query(JobPosting).count()
+        finally:
+            session.close()
+    
+    def get_all_jobs(self) -> list[dict[str, Any]]:
+        """
+        Get all job postings from the database as a list of dictionaries.
+        
+        Returns:
+            List of job dictionaries
+        """
+        session: Session = self.Session()
+        try:
+            jobs = session.query(JobPosting).all()
+            return [
+                {
+                    'ID': job.id,
+                    'Stanowisko': job.stanowisko,
+                    'Firma': job.firma,
+                    'Poziom': job.poziom.value if job.poziom else None, # type: ignore
+                    'Kategoria': job.kategoria,
+                    'Technologie': job.technologie if job.technologie else "Brak danych", # type: ignore
+                    'Lokalizacja': job.lokalizacja,
+                    'Wynagrodzenie Od': job.wynagrodzenie_od,
+                    'Wynagrodzenie Do': job.wynagrodzenie_do,
+                    'Waluta': job.waluta.value if job.waluta else None, # type: ignore
+                    'Utworzono': job.utworzono,
+                    'Zaktualizowano': job.zaktualizowano,
+                    'Scraped At': job.scraped_at,
+                    'Source': job.source.value if job.source else None # type: ignore
+                }
+                for job in jobs
+            ]
         finally:
             session.close()
