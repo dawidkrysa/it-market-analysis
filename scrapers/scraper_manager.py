@@ -2,6 +2,7 @@ import logging
 from typing import List, Dict, Any
 from .sources.justjoinit import JustJoinIT
 from .sources.theprotocolit import TheProtocolIT
+from .sources.nofluffjobs import NoFluffJobs
 
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,8 @@ class ScraperManager:
         """
         self._scrapers = {
             "justjoinit": JustJoinIT,
-            "theprotocolit": TheProtocolIT
+            "theprotocolit": TheProtocolIT,
+            "nofluffjobs": NoFluffJobs
         }
 
     def run_all(self, experience_level: str = "junior") -> List[Dict[str, Any]]:
@@ -30,7 +32,7 @@ class ScraperManager:
         all_results = []
         
         for name, scraper_class in self._scrapers.items():
-            logger.info(f"Uruchamiam scraper dla: {name}")
+            logger.info(f"Starting scraper for: {name}")
             instance = scraper_class()
             data = instance.run(experience_levels=experience_level)
             all_results.extend(data)
