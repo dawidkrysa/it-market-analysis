@@ -70,7 +70,6 @@ class JustJoinIT(BaseScraper):
 
         # Seniority
         seniority = offer.get("experienceLevel", "Junior").strip().upper()
-        logger.info(f"Parsing offer {base_slug} with seniority {seniority}")
 
         # Dates
         published_at = offer.get("publishedAt")
