@@ -10,7 +10,11 @@ import pandas as pd
 from scrapers.scraper_manager import ScraperManager
 from utils.db_handler import DatabaseHandler
 
-st.title("Metodologia i Dane")
+st.title("⚙️ Metodologia i Ekstrakcja Danych")
+st.markdown("""
+Ta sekcja służy jako centrum dowodzenia dla silnika danych aplikacji **Radar Mikro-Nisz**. 
+Pozwala na ręczne uruchamianie procesu web scrapingu, monitorowanie stanu bazy danych oraz podgląd surowych rekordów pozyskanych z rynkowych portali pracy.
+""")
 
 # Initialize database
 db_handler = DatabaseHandler()

@@ -5,6 +5,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime,timezone
 from typing import Any
+import pandas as pd
+import re
 
 from sqlalchemy.orm.session import Session
 from config.settings import Settings
@@ -201,3 +203,127 @@ class DatabaseHandler:
             ]
         finally:
             session.close()
+
+    def get_blue_ocean_niches(self, min_jobs: int = 15, max_jobs: int = 70) -> pd.DataFrame:
+        """
+        Fetches data from the database and performs analysis to find "Blue Ocean" niches.
+        Uses median imputation for missing salaries and calculates the market exposure time 
+        of job postings.
+        
+        Args:
+            min_jobs: Minimum number of job offers for a technology to be considered market-relevant.
+            max_jobs: Maximum number of job offers above which the market is considered saturated.
+            
+        Returns:
+            pd.DataFrame: A summary of potential niches, sorted by highest attractiveness.
+        """
+        # Fetch data as a list of dictionaries using the existing method
+        jobs_data = self.get_all_jobs()
+        
+        if not jobs_data:
+            return pd.DataFrame() # Return an empty DataFrame if the database is empty
+
+        df = pd.DataFrame(jobs_data)
+
+        df['Firma_Znormalizowana'] = df['Firma'].apply(self.__normalize_company_name)
+
+        df = df.drop_duplicates(
+            subset=['Firma_Znormalizowana', 'Stanowisko', 'Technologie', 'Wynagrodzenie Od', 'Wynagrodzenie Do'], 
+            keep='first'
+        )
+
+        # --- STEP 1: DATA CLEANING AND FINANCIAL IMPUTATION ---
+        df['Wynagrodzenie Od'] = pd.to_numeric(df['Wynagrodzenie Od'], errors='coerce')
+        df['Wynagrodzenie Do'] = pd.to_numeric(df['Wynagrodzenie Do'], errors='coerce')
+
+        # Fill missing values with the median grouped by category
+        # (Using transform to preserve the original DataFrame shape)
+        df['Wynagrodzenie Od'] = df.groupby('Kategoria')['Wynagrodzenie Od'].transform(lambda x: x.fillna(x.median()))
+        df['Wynagrodzenie Do'] = df.groupby('Kategoria')['Wynagrodzenie Do'].transform(lambda x: x.fillna(x.median()))
+
+        # If there are still missing values after group median imputation, fill them with the overall median
+        df['Wynagrodzenie Od'] = df['Wynagrodzenie Od'].fillna(df['Wynagrodzenie Od'].median())
+        df['Wynagrodzenie Do'] = df['Wynagrodzenie Do'].fillna(df['Wynagrodzenie Do'].median())
+        
+        # Calculate the average salary for a given position
+        df['Srednia_Kwota'] = (df['Wynagrodzenie Od'] + df['Wynagrodzenie Do']) / 2
+
+        # --- STEP 2: CALCULATING TIME ON MARKET (DEMAND PROXY) ---
+        df['Utworzono'] = pd.to_datetime(df['Utworzono'], utc=True)
+        df['Scraped At'] = pd.to_datetime(df['Scraped At'], utc=True)
+        
+        # Convert date difference to days (yields NaN if a date is missing)
+        df['Czas_Na_Rynku_Dni'] = (df['Scraped At'] - df['Utworzono']).dt.days
+
+        # --- STEP 3: TECHNOLOGY TOKENIZATION ---
+        df_tech = df.dropna(subset=['Technologie']).copy()
+        
+        # Convert strings to lists (splitting by comma)
+        df_tech['Technologia_Pojedyncza'] = df_tech['Technologie'].astype(str).str.split(',')
+        
+        # Explode - creates a separate row for each technology in the list (cloning the rest of the data)
+        df_exploded = df_tech.explode('Technologia_Pojedyncza')
+        
+        # Text normalization (lowercase, stripping whitespaces)
+        df_exploded['Technologia_Pojedyncza'] = df_exploded['Technologia_Pojedyncza'].str.strip().str.lower()
+        
+        # Filter out tags indicating missing data that were set in get_all_jobs()
+        df_exploded = df_exploded[df_exploded['Technologia_Pojedyncza'] != 'brak danych']
+
+        # --- STEP 4: NICHE CONSOLIDATION ---
+        niche_analysis = df_exploded.groupby('Technologia_Pojedyncza').agg(
+            Liczba_Ofert=('ID', 'count'),
+            Mediana_Zarobkow=('Srednia_Kwota', 'median'),
+            Sredni_Czas_Zatrudnienia=('Czas_Na_Rynku_Dni', 'mean')
+        ).reset_index()
+
+        # --- STEP 5: FILTERING ---
+        potencjalne_nisze = niche_analysis[
+            (niche_analysis['Liczba_Ofert'] >= min_jobs) & 
+            (niche_analysis['Liczba_Ofert'] <= max_jobs)
+        ].sort_values(
+            by=['Mediana_Zarobkow', 'Sredni_Czas_Zatrudnienia'], 
+            ascending=[False, False]
+        )
+
+
+        return potencjalne_nisze
+    
+    def __normalize_company_name(self, name: str) -> str:
+        if pd.isna(name) or name == "Brak danych":
+            return "nieznana"
+        
+        name = str(name).lower()
+        
+        # 1. Lista form do usunięcia (od najdłuższych do najkrótszych)
+        legal_forms = [
+            r'spółka z ograniczoną odpowiedzialnością',
+            r'oddział w polsce',
+            r'prosta spółka akcyjna',
+            r'spółka akcyjna',
+            r'spółka komandytowa',
+            r'spółka jawna',
+            r'sp\.?\s*z\s*o\.?\s*o\.?\s*sp\.?\s*k\.?', # sp. z o.o. sp. k.
+            r'sp\.?\s*z\s*o\.?\s*o\.?',                # sp. z o.o. / sp z o o
+            r'sp\.?\s*k\.?',                           # sp. k.
+            r'p\.?\s*s\.?\s*a\.?',                     # p.s.a.
+            r'prosta\s+s\.?\s*a\.?',                   # prosta s.a.
+            r's\.?\s*a\.?',                            # s.a. / sa
+            r's\.?\s*c\.?',                            # s.c.
+            r'\blimited\b', r'\bltd\.?\b', r'\bllc\b',
+            r'\bgmbh\b', r'\bag\b', r'\bkft\.?\b', 
+            r'\bn\.?\s*v\.?\b', r'\bvvag\b', r'\bgroup\b'
+        ]
+        
+        # 2. Usuwanie form prawnych
+        for form in legal_forms:
+            # Używamy zamiany, ignorując polskie znaki diakrytyczne jako granice słów
+            name = re.sub(form, ' ', name)
+            
+        # 3. Usuwanie znaków interpunkcyjnych (w tym cudzysłowów w np. "MARITEX")
+        name = re.sub(r'[^\w\s]', ' ', name)
+        
+        # 4. Usunięcie nadmiarowych spacji
+        name = re.sub(r'\s+', ' ', name).strip()
+        
+        return name
