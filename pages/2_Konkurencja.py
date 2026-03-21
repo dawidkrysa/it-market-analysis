@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from utils.db_handler import DatabaseHandler 
+from utils.db_handler import DatabaseHandler
 
 # Header and description
 st.title("Strategia Błękitnego Oceanu")
