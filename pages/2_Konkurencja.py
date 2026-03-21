@@ -49,59 +49,69 @@ if df_niches is None or df_niches.empty:
     st.warning(f"⚠️ Nie znaleziono żadnych technologii spełniających kryterium {min_jobs} - {max_jobs} ofert. Zmień parametry w panelu bocznym.")
 else:
     # KPI Metrics
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Liczba zidentyfikowanych nisz", len(df_niches))
     col2.metric("Najbardziej opłacalna nisza", df_niches.iloc[0]['Technologia_Pojedyncza'].title())
     col3.metric("Mediana zarobków lidera", f"{df_niches.iloc[0]['Mediana_Zarobkow']:,.0f} PLN")
+    col4.metric("Procent ofert z widelkami", f"{df_niches.iloc[0]['Procent_Ofert_Z_Widelkami']:.1f}%")
 
     st.markdown("---")
 
-    # Divide the page into two columns: one for the chart and one for the table
-    chart_col, table_col = st.columns([3, 2])
+    # # Divide the page into two columns: one for the chart and one for the table
+    # chart_col, table_col = st.columns([3, 2])
 
-    with chart_col:
-        st.subheader("Wizualizacja Top 15 Nisz rynkowych")
-        # Plotly bar chart with color representing the average time on the market (difficulty of recruitment)
-        top_15 = df_niches.head(15).copy()
-        
-        # Remove rows with missing values in critical columns to avoid errors in plotting
-        top_15 = top_15.dropna(subset=['Mediana_Zarobkow', 'Sredni_Czas_Zatrudnienia'])
-        
-        # Round the values for better display in the tooltip
-        top_15['Mediana_Zarobkow'] = top_15['Mediana_Zarobkow'].round(2)
-        top_15['Sredni_Czas_Zatrudnienia'] = top_15['Sredni_Czas_Zatrudnienia'].round(2)
+    # with chart_col:
+    st.subheader("Wizualizacja Top 15 Nisz rynkowych")
+    # Plotly bar chart with color representing the average time on the market (difficulty of recruitment)
+    top_15 = df_niches.head(15).copy()
+    
+    # Remove rows with missing values in critical columns to avoid errors in plotting
+    top_15 = top_15.dropna(subset=['Mediana_Zarobkow', 'Sredni_Czas_Zatrudnienia'])
+    
+    # Round the values for better display in the tooltip
+    top_15['Mediana_Zarobkow'] = top_15['Mediana_Zarobkow'].round(2)
+    top_15['Sredni_Czas_Zatrudnienia'] = top_15['Sredni_Czas_Zatrudnienia'].round(2)
 
-        fig = px.bar(
-            top_15,
-            x='Technologia_Pojedyncza',
-            y='Mediana_Zarobkow',
-            color='Sredni_Czas_Zatrudnienia',
-            color_continuous_scale='Blues',
-            labels={
-                'Technologia_Pojedyncza': 'Technologia',
-                'Mediana_Zarobkow': 'Mediana Wynagrodzeń (PLN)',
-                'Sredni_Czas_Zatrudnienia': 'Średni Czas na Rynku (Dni)'
-            },
-            title="Zarobki vs Trudność w rekrutacji (kolor)"
-        )
-        fig.update_layout(xaxis={'categoryorder':'total descending'})
-        st.plotly_chart(fig, use_container_width=True)
+    fig = px.bar(
+        top_15,
+        x='Technologia_Pojedyncza',
+        y='Mediana_Zarobkow',
+        color='Sredni_Czas_Zatrudnienia',
+        hover_data={'Procent_Ofert_Z_Widelkami': True},
+        color_continuous_scale='Blues',
+        labels={
+            'Technologia_Pojedyncza': 'Technologia',
+            'Mediana_Zarobkow': 'Mediana Wynagrodzeń (PLN)',
+            'Sredni_Czas_Zatrudnienia': 'Średni Czas na Rynku (Dni)',
+            'Procent_Ofert_Z_Widelkami': 'Oferty z widełkami (%)'
+        },
+        title="Zarobki vs Trudność w rekrutacji (kolor)"
+    )
+    fig.update_layout(xaxis={'categoryorder':'total descending'})
+    st.plotly_chart(fig, use_container_width=True)
 
-    with table_col:
-        st.subheader("Pełne zestawienie analityczne")
-        # Format the DataFrame for better readability in the table
-        formatted_df = df_niches.copy()
-        formatted_df['Mediana_Zarobkow'] = formatted_df['Mediana_Zarobkow'].apply(
-            lambda x: f"{x:,.2f} PLN".replace(',', ' ') if pd.notnull(x) else "Brak danych"
-        )
-        formatted_df['Sredni_Czas_Zatrudnienia'] = formatted_df['Sredni_Czas_Zatrudnienia'].apply(
-            lambda x: f"{x:.2f} dni" if pd.notnull(x) else "Brak danych"
-        )
-        formatted_df.columns = ['Technologia', 'Liczba Ofert', 'Mediana Zarobków', 'Czas na Rynku']
-        
-        st.dataframe(
-            formatted_df,
-            use_container_width=True,
-            hide_index=True,
-            height=400
-        )
+    # with table_col:
+    st.subheader("Pełne zestawienie analityczne")
+    # Format the DataFrame for better readability in the table
+    formatted_df = df_niches.copy()
+    formatted_df['Mediana_Zarobkow'] = formatted_df['Mediana_Zarobkow'].apply(
+        lambda x: f"{x:,.2f} PLN".replace(',', ' ') if pd.notnull(x) else "Brak danych"
+    )
+    formatted_df['Sredni_Czas_Zatrudnienia'] = formatted_df['Sredni_Czas_Zatrudnienia'].apply(
+        lambda x: f"{x:.2f} dni" if pd.notnull(x) else "Brak danych"
+    )
+
+    formatted_df.columns = [
+        'Technologia', 
+        'Liczba Ofert', 
+        'Mediana Zarobków', 
+        'Czas na Rynku', 
+        'Jawne widełki'
+    ]
+    
+    st.dataframe(
+        formatted_df,
+        use_container_width=True,
+        hide_index=True,
+        height=400
+    )

@@ -228,13 +228,14 @@ class DatabaseHandler:
         df['Firma_Znormalizowana'] = df['Firma'].apply(self.__normalize_company_name)
 
         df = df.drop_duplicates(
-            subset=['Firma_Znormalizowana', 'Stanowisko', 'Technologie', 'Wynagrodzenie Od', 'Wynagrodzenie Do'], 
             keep='first'
         )
 
         # --- STEP 1: DATA CLEANING AND FINANCIAL IMPUTATION ---
         df['Wynagrodzenie Od'] = pd.to_numeric(df['Wynagrodzenie Od'], errors='coerce')
         df['Wynagrodzenie Do'] = pd.to_numeric(df['Wynagrodzenie Do'], errors='coerce')
+
+        df['Podane_Widelki'] = df['Wynagrodzenie Od'].notna() | df['Wynagrodzenie Do'].notna()
 
         # Fill missing values with the median grouped by category
         # (Using transform to preserve the original DataFrame shape)
@@ -267,23 +268,34 @@ class DatabaseHandler:
         # Text normalization (lowercase, stripping whitespaces)
         df_exploded['Technologia_Pojedyncza'] = df_exploded['Technologia_Pojedyncza'].str.strip().str.lower()
         
+        # Define a list of generic tags to filter out (these are not specific technologies and may indicate missing data)
+        generic_tags = [
+            'brak danych', 'english', 'angielski', 'agile', 'scrum', 'git', 
+            'jira', 'confluence', 'communication', 'team player', 
+        ]
+
         # Filter out tags indicating missing data that were set in get_all_jobs()
-        df_exploded = df_exploded[df_exploded['Technologia_Pojedyncza'] != 'brak danych']
+        df_exploded = df_exploded[~df_exploded['Technologia_Pojedyncza'].isin(generic_tags)]
 
         # --- STEP 4: NICHE CONSOLIDATION ---
         niche_analysis = df_exploded.groupby('Technologia_Pojedyncza').agg(
             Liczba_Ofert=('ID', 'count'),
             Mediana_Zarobkow=('Srednia_Kwota', 'median'),
-            Sredni_Czas_Zatrudnienia=('Czas_Na_Rynku_Dni', 'mean')
+            Sredni_Czas_Zatrudnienia=('Czas_Na_Rynku_Dni', 'mean'),
+            Procent_Ofert_Z_Widelkami=('Podane_Widelki', 'mean')
         ).reset_index()
+
+        niche_analysis['Procent_Ofert_Z_Widelkami'] = (niche_analysis['Procent_Ofert_Z_Widelkami'] * 100).round(1)
 
         # --- STEP 5: FILTERING ---
         potencjalne_nisze = niche_analysis[
             (niche_analysis['Liczba_Ofert'] >= min_jobs) & 
-            (niche_analysis['Liczba_Ofert'] <= max_jobs)
+            (niche_analysis['Liczba_Ofert'] <= max_jobs) &
+            # Avoid niches where salary data is likely missing (less than 10% of offers with salary info)
+            (niche_analysis['Procent_Ofert_Z_Widelkami'] >= 10.0)
         ].sort_values(
-            by=['Mediana_Zarobkow', 'Sredni_Czas_Zatrudnienia'], 
-            ascending=[False, False]
+            by=['Mediana_Zarobkow', 'Procent_Ofert_Z_Widelkami', 'Sredni_Czas_Zatrudnienia'], 
+            ascending=[False, False, True]
         )
 
 
