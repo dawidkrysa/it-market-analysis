@@ -48,21 +48,47 @@ with st.spinner("Trwa analiza tysięcy ofert pracy... ⏳"):
 if df_niches is None or df_niches.empty:
     st.warning(f"⚠️ Nie znaleziono żadnych technologii spełniających kryterium {min_jobs} - {max_jobs} ofert. Zmień parametry w panelu bocznym.")
 else:
-    # KPI Metrics
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Liczba zidentyfikowanych nisz", len(df_niches))
-    col2.metric("Najbardziej opłacalna nisza", df_niches.iloc[0]['Technologia_Pojedyncza'].title())
-    col3.metric("Mediana zarobków lidera", f"{df_niches.iloc[0]['Mediana_Zarobkow']:,.0f} PLN")
-    col4.metric("Procent ofert z widelkami", f"{df_niches.iloc[0]['Procent_Ofert_Z_Widelkami']:.1f}%")
+    # Additional check to ensure DataFrame has rows after filtering
+    if len(df_niches) == 0:
+        st.warning(f"⚠️ Nie znaleziono żadnych technologii spełniających kryterium {min_jobs} - {max_jobs} ofert. Zmień parametry w panelu bocznym.")
+    else:
+        # KPI Metrics
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Liczba zidentyfikowanych nisz", len(df_niches))
+        col2.metric("Najbardziej opłacalna nisza", df_niches.iloc[0]['Technologia_Pojedyncza'].title())
+        col3.metric("Mediana zarobków lidera", f"{df_niches.iloc[0]['Mediana_Zarobkow']:,.0f} PLN")
+        
+        # Add quality indicator for top niche
+        top_transparency = df_niches.iloc[0]['Procent_Ofert_Z_Widelkami']
+        transparency_emoji = '🟢' if top_transparency >= 50 else ('🟡' if top_transparency >= 25 else '🔴')
+        col4.metric(
+            "Transparentność lidera",
+            f"{transparency_emoji} {top_transparency:.1f}%",
+            help="Procent ofert z realnymi widełkami płacowymi. 🟢≥50% 🟡≥25% 🔴<25%"
+        )
+        
+        # Data quality warning
+        low_quality_niches = df_niches[df_niches['Procent_Ofert_Z_Widelkami'] < 25]
+        if len(low_quality_niches) > 0:
+            st.warning(f"""
+            ⚠️ **Uwaga o jakości danych**: {len(low_quality_niches)} z {len(df_niches)} nisz ma niską transparentność płacową (<25% ofert z widełkami).
+            Mediana wynagrodzeń dla tych technologii jest obliczana z ograniczonej próbki i może być mniej wiarygodna.
+            """)
 
     st.markdown("---")
 
-    # # Divide the page into two columns: one for the chart and one for the table
-    # chart_col, table_col = st.columns([3, 2])
-
-    # with chart_col:
     st.subheader("Wizualizacja Top 15 Nisz rynkowych")
-    # Plotly bar chart with color representing the average time on the market (difficulty of recruitment)
+    
+    # Info box explaining the metrics
+    st.info("""
+    📊 **Jak interpretować wykres:**
+    - **Wysokość słupka**: Mediana wynagrodzeń (wyższa = lepiej płatna nisza)
+    - **Kolor słupka**: Średni czas ogłoszenia na rynku (ciemniejszy = dłużej aktywne)
+    - **Transparentność danych**: % ofert z realnymi widełkami płacowymi (wyświetlane przy najechaniu)
+    
+    ⚠️ **Uwaga**: Długi czas na rynku może oznaczać trudności w rekrutacji (brak kandydatów) LUB niski popyt na stanowisko.
+    """)
+    
     top_15 = df_niches.head(15).copy()
     
     # Remove rows with missing values in critical columns to avoid errors in plotting
@@ -71,26 +97,37 @@ else:
     # Round the values for better display in the tooltip
     top_15['Mediana_Zarobkow'] = top_15['Mediana_Zarobkow'].round(2)
     top_15['Sredni_Czas_Zatrudnienia'] = top_15['Sredni_Czas_Zatrudnienia'].round(2)
+    
+    # Create quality indicator for hover data
+    top_15['Jakosc_Danych'] = top_15['Procent_Ofert_Z_Widelkami'].apply(
+        lambda x: '🟢 Wysoka' if x >= 50 else ('🟡 Średnia' if x >= 25 else '🔴 Niska')
+    )
 
     fig = px.bar(
         top_15,
         x='Technologia_Pojedyncza',
         y='Mediana_Zarobkow',
         color='Sredni_Czas_Zatrudnienia',
-        hover_data={'Procent_Ofert_Z_Widelkami': True},
+        hover_data={
+            'Procent_Ofert_Z_Widelkami': ':.1f',
+            'Jakosc_Danych': True,
+            'Liczba_Ofert': True,
+            'Technologia_Pojedyncza': False
+        },
         color_continuous_scale='Blues',
         labels={
             'Technologia_Pojedyncza': 'Technologia',
             'Mediana_Zarobkow': 'Mediana Wynagrodzeń (PLN)',
             'Sredni_Czas_Zatrudnienia': 'Średni Czas na Rynku (Dni)',
-            'Procent_Ofert_Z_Widelkami': 'Oferty z widełkami (%)'
+            'Procent_Ofert_Z_Widelkami': 'Transparentność (%)',
+            'Jakosc_Danych': 'Jakość danych',
+            'Liczba_Ofert': 'Liczba ofert'
         },
-        title="Zarobki vs Trudność w rekrutacji (kolor)"
+        title="Mediana Wynagrodzeń vs Czas na Rynku (kolor = dni aktywności)"
     )
     fig.update_layout(xaxis={'categoryorder':'total descending'})
     st.plotly_chart(fig, use_container_width=True)
 
-    # with table_col:
     st.subheader("Pełne zestawienie analityczne")
     # Format the DataFrame for better readability in the table
     formatted_df = df_niches.copy()
@@ -102,11 +139,11 @@ else:
     )
 
     formatted_df.columns = [
-        'Technologia', 
-        'Liczba Ofert', 
-        'Mediana Zarobków', 
-        'Czas na Rynku', 
-        'Jawne widełki'
+        'Technologia',
+        'Liczba Ofert',
+        'Mediana Zarobków',
+        'Czas na Rynku',
+        'Procent ofert z widełkami (%)'
     ]
     
     st.dataframe(
