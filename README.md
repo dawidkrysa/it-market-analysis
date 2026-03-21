@@ -10,7 +10,7 @@ Multi-page Streamlit application for analyzing IT job market niches vs mainstrea
 
 ### Setup & Run
 
-1. **Clone the repository:**
+1. **Clone the repository**
 
 2. **Copy environment file:**
    ```powershell
@@ -18,8 +18,14 @@ Multi-page Streamlit application for analyzing IT job market niches vs mainstrea
    ```
 
 3. **Start development environment:**
+   
+   **Option A: VS Code Tasks (Recommended)**
+   - Press `Ctrl+Shift+B` or
+   - Press `Ctrl+Shift+P` → "Tasks: Run Task" → "Start Dev Environment"
+
+   **Option B: Direct Docker command**
    ```powershell
-   .\manage.ps1 dev
+   docker-compose -f docker-compose.dev.yml up
    ```
 
 4. **Access the application:**
@@ -28,53 +34,53 @@ Multi-page Streamlit application for analyzing IT job market niches vs mainstrea
 
 ## 🛠️ Development Commands
 
-Use the PowerShell script for all operations:
+### VS Code Tasks (Recommended)
+
+Press `Ctrl+Shift+P` → "Tasks: Run Task" or `Ctrl+Shift+B` for quick build. Available tasks:
+
+**Development:**
+- **Start Dev Environment** (`Ctrl+Shift+B`) - Launch with hot reload
+- **Stop Dev Environment** - Stop all containers
+- **Full Restart** - Sequential stop and start
+- **Rebuild Containers** - Full rebuild with no cache
+
+**Monitoring:**
+- **View Logs** - Monitor application logs in real-time
+
+**Testing & Maintenance:**
+- **Run Tests** - Execute pytest in container
+- **Install Dependencies** - Update packages from requirements.txt
+- **Run Scraper** - Execute all scrapers via ScraperManager
+- **Database Shell** - Open PostgreSQL interactive shell
+
+### Direct Docker Commands
 
 ```powershell
 # Start development with hot reload
-.\manage.ps1 dev
-
-# View logs
-.\manage.ps1 logs
-
-# Access container shell
-.\manage.ps1 shell
-
-# Access PostgreSQL database
-.\manage.ps1 db-shell
-
-# Stop containers
-.\manage.ps1 stop
-
-# Rebuild from scratch
-.\manage.ps1 rebuild
-
-# Clean everything
-.\manage.ps1 clean
-
-# Show all commands
-.\manage.ps1 help
-```
-
-### Alternative: VS Code Tasks
-
-Press `Ctrl+Shift+P` → "Tasks: Run Task" → Select:
-- **Start Dev Environment** - Launch with hot reload
-- **View Logs** - Monitor application logs
-- **Stop Dev Environment** - Stop containers
-- **Rebuild Containers** - Full rebuild
-
-### Alternative: Direct Docker Commands
-
-```powershell
-# Start development
 docker-compose -f docker-compose.dev.yml up
 
-# Stop
+# Stop containers
 docker-compose -f docker-compose.dev.yml down
 
 # View logs
 docker-compose -f docker-compose.dev.yml logs -f streamlit-app
+
+# Rebuild containers
+docker-compose -f docker-compose.dev.yml down
+docker-compose -f docker-compose.dev.yml build --no-cache
+docker-compose -f docker-compose.dev.yml up
+
+# Access container shell
+docker-compose -f docker-compose.dev.yml exec streamlit-app /bin/bash
+
+# Access PostgreSQL database
+docker-compose -f docker-compose.dev.yml exec postgres psql -U postgres -d radar_db
+
+# Run tests
+docker-compose -f docker-compose.dev.yml exec streamlit-app pytest tests/ -v
+
+# Install dependencies
+docker-compose -f docker-compose.dev.yml exec streamlit-app pip install -r requirements.txt
 ```
 
 ## 📁 Project Structure
@@ -100,10 +106,11 @@ docker-compose -f docker-compose.dev.yml logs -f streamlit-app
 │   └── logging_config.py
 ├── config/                # Configuration
 ├── logs/                  # Application logs
+├── .vscode/               # VS Code configuration
+│   └── tasks.json         # Automated development tasks
 ├── Dockerfile             # Production Docker image
 ├── docker-compose.yml     # Production setup
-├── docker-compose.dev.yml # Development setup (hot reload)
-└── manage.ps1             # Windows management script
+└── docker-compose.dev.yml # Development setup (hot reload)
 ```
 
 ## 🧪 Development Workflow
@@ -111,20 +118,21 @@ docker-compose -f docker-compose.dev.yml logs -f streamlit-app
 1. **Edit any Python file** in VS Code
 2. **Save the file** - Streamlit auto-reloads
 3. **Refresh browser** to see changes
-4. **Check logs** if needed: `.\manage.ps1 logs`
+4. **Check logs** if needed: Use "View Logs" task or `docker-compose -f docker-compose.dev.yml logs -f streamlit-app`
 
 **No Python installation needed locally!** Everything runs in Docker.
 
 ## 🔄 Updating Dependencies
 
 1. Edit `requirements.txt`
-2. Rebuild: `.\manage.ps1 rebuild`
+2. Use "Install Dependencies" task or rebuild containers
 
 ## 📊 Database Management
 
 ### Access PostgreSQL
+Use "Database Shell" task or:
 ```powershell
-.\manage.ps1 db-shell
+docker-compose -f docker-compose.dev.yml exec postgres psql -U postgres -d radar_db
 ```
 
 ### Backup Database
@@ -141,17 +149,17 @@ Get-Content backup.sql | docker-compose -f docker-compose.dev.yml exec -T db psq
 
 ### Port Already in Use
 ```powershell
-# Stop containers
-.\manage.ps1 stop
+# Stop containers using VS Code task or:
+docker-compose -f docker-compose.dev.yml down
 
 # Or kill process on port 8501
 Get-Process -Id (Get-NetTCPConnection -LocalPort 8501).OwningProcess | Stop-Process
 ```
 
 ### Changes Not Reflecting
-1. Check logs: `.\manage.ps1 logs`
+1. Check logs using "View Logs" task
 2. Hard refresh browser: `Ctrl+Shift+R`
-3. Rebuild if needed: `.\manage.ps1 rebuild`
+3. Rebuild using "Rebuild Containers" task
 
 ### Database Connection Issues
 ```powershell
