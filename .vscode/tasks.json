@@ -1,0 +1,76 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Start Dev Environment",
+            "type": "shell",
+            "command": "docker-compose -f docker-compose.dev.yml up",
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Stop Dev Environment",
+            "type": "shell",
+            "command": "docker-compose -f docker-compose.dev.yml down",
+            "problemMatcher": []
+        },
+        {
+            "label": "View Logs",
+            "type": "shell",
+            "command": "docker-compose -f docker-compose.dev.yml logs -f streamlit-app",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Rebuild Containers",
+            "type": "shell",
+            "command": "docker-compose -f docker-compose.dev.yml down && docker-compose -f docker-compose.dev.yml build --no-cache && docker-compose -f docker-compose.dev.yml up",
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Tests",
+            "type": "shell",
+            "command": "docker-compose -f docker-compose.dev.yml exec streamlit-app pytest tests/ -v",
+            "problemMatcher": [],
+            "group": "test"
+        },
+        {
+            "label": "Install Dependencies",
+            "type": "shell",
+            "command": "docker-compose -f docker-compose.dev.yml exec streamlit-app pip install -r requirements.txt",
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Scraper",
+            "type": "shell",
+            "command": "docker-compose -f docker-compose.dev.yml exec streamlit-app python -c \"from scrapers.scraper_manager import ScraperManager; ScraperManager().run_all()\"",
+            "problemMatcher": []
+        },
+        {
+            "label": "Database Shell",
+            "type": "shell",
+            "command": "docker-compose -f docker-compose.dev.yml exec postgres psql -U postgres -d radar_db",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Full Restart",
+            "dependsOn": ["Stop Dev Environment", "Start Dev Environment"],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        }
+    ]
+}
