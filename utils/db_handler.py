@@ -80,6 +80,15 @@ class DatabaseHandler:
     Manages SQLAlchemy engine, sessions, and CRUD operations.
     """
     
+    # Minimum percentage of offers with salary information required to consider a niche valid
+    MIN_SALARY_TRANSPARENCY_PERCENT = 10.0
+    
+    # Generic tags that don't represent specific technologies
+    GENERIC_TECHNOLOGY_TAGS = frozenset([
+        'brak danych', 'english', 'angielski', 'agile', 'scrum', 'git',
+        'jira', 'confluence', 'communication', 'team player',
+    ])
+    
     def __init__(self, database_url: str = Settings.DATABASE_URL) -> None:
         """
         Initialize database handler.
@@ -203,11 +212,174 @@ class DatabaseHandler:
             ]
         finally:
             session.close()
+    def _deduplicate_jobs(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Remove duplicate job postings based on normalized company name and key attributes.
+        
+        Args:
+            df: DataFrame with job postings
+            
+        Returns:
+            DataFrame with duplicates removed
+        """
+        df['Firma_Znormalizowana'] = df['Firma'].apply(self.__normalize_company_name)
+        
+        df = df.drop_duplicates(
+            subset=['Firma_Znormalizowana', 'Stanowisko', 'Technologie', 'Wynagrodzenie Od', 'Wynagrodzenie Do'],
+            keep='first'
+        )
+        
+        # Drop the temporary normalization column as it's no longer needed
+        return df.drop(columns=['Firma_Znormalizowana'])
+    
+    def _prepare_salary_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Prepare salary data for analysis without imputation.
+        
+        Strategy:
+        1. Convert salary columns to numeric
+        2. Calculate average salary ONLY for positions with real salary data
+        3. Keep track of which salaries are real vs missing
+        
+        Args:
+            df: DataFrame with job postings
+            
+        Returns:
+            DataFrame with prepared salary data and tracking columns
+        """
+        # Convert to numeric, coercing errors to NaN
+        df['Wynagrodzenie Od'] = pd.to_numeric(df['Wynagrodzenie Od'], errors='coerce')
+        df['Wynagrodzenie Do'] = pd.to_numeric(df['Wynagrodzenie Do'], errors='coerce')
+        
+        # Track which rows have real salary data (both from and to are present)
+        df['Ma_Realne_Wynagrodzenie'] = (
+            df['Wynagrodzenie Od'].notna() & df['Wynagrodzenie Do'].notna()
+        )
+        
+        # Calculate the average salary ONLY for positions with complete salary data
+        df['Srednia_Kwota'] = df.apply(
+            lambda row: (row['Wynagrodzenie Od'] + row['Wynagrodzenie Do']) / 2
+            if row['Ma_Realne_Wynagrodzenie'] else None,
+            axis=1
+        )
+        
+        return df
+    
+    def _calculate_market_time(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Calculate how long each job posting has been on the market.
+        
+        Args:
+            df: DataFrame with job postings
+            
+        Returns:
+            DataFrame with market time calculated in days
+        """
+        df['Utworzono'] = pd.to_datetime(df['Utworzono'], utc=True)
+        df['Scraped At'] = pd.to_datetime(df['Scraped At'], utc=True)
+        
+        # Convert date difference to days (yields NaN if a date is missing)
+        df['Czas_Na_Rynku_Dni'] = (df['Scraped At'] - df['Utworzono']).dt.days
+        
+        return df
+    
+    def _explode_technologies(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Tokenize and explode technology strings into individual rows.
+        
+        Process:
+        1. Split comma-separated technology strings
+        2. Create separate row for each technology
+        3. Normalize text (lowercase, strip whitespace)
+        4. Filter out generic tags
+        
+        Args:
+            df: DataFrame with job postings
+            
+        Returns:
+            DataFrame with one row per technology per job
+        """
+        df_tech = df.dropna(subset=['Technologie']).copy()
+        
+        # Convert strings to lists (splitting by comma)
+        df_tech['Technologia_Pojedyncza'] = df_tech['Technologie'].astype(str).str.split(',')
+        
+        # Explode - creates a separate row for each technology in the list
+        df_exploded = df_tech.explode('Technologia_Pojedyncza')
+        
+        # Text normalization (lowercase, stripping whitespaces)
+        df_exploded['Technologia_Pojedyncza'] = df_exploded['Technologia_Pojedyncza'].str.strip().str.lower()
+        
+        # Filter out generic tags using the class constant
+        df_exploded = df_exploded[~df_exploded['Technologia_Pojedyncza'].isin(self.GENERIC_TECHNOLOGY_TAGS)]
+        
+        return df_exploded
+    
+    def _calculate_salary_transparency_percent(self, salary_series: pd.Series) -> float:
+        """
+        Calculate percentage of non-null salary values.
+        
+        Args:
+            salary_series: Series of salary values
+            
+        Returns:
+            Percentage of non-null values (0-100), rounded to 1 decimal
+        """
+        return ((salary_series.notna().sum() / len(salary_series)) * 100).round(1)
+    
+    def _aggregate_niche_metrics(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Aggregate job data by technology to calculate niche metrics.
+        
+        Metrics calculated:
+        - Number of job offers (total)
+        - Median salary (from real data only, excluding missing values)
+        - Average time on market
+        - Percentage of offers with real salary information
+        
+        Args:
+            df: DataFrame with exploded technologies
+            
+        Returns:
+            DataFrame with aggregated metrics per technology
+        """
+        return df.groupby('Technologia_Pojedyncza').agg(
+            Liczba_Ofert=('ID', 'count'),
+            Mediana_Zarobkow=('Srednia_Kwota', lambda x: x.dropna().median() if x.notna().any() else None),
+            Sredni_Czas_Zatrudnienia=('Czas_Na_Rynku_Dni', 'mean'),
+            Procent_Ofert_Z_Widelkami=('Ma_Realne_Wynagrodzenie', lambda x: (x.sum() / len(x) * 100).round(1))
+        ).reset_index()
+    
+    def _filter_viable_niches(self, df: pd.DataFrame, min_jobs: int, max_jobs: int) -> pd.DataFrame:
+        """
+        Filter technologies to identify viable "Blue Ocean" niches.
+        
+        Filtering criteria:
+        - Job count between min_jobs and max_jobs (market relevance without saturation)
+        - Salary transparency above minimum threshold
+        
+        Args:
+            df: DataFrame with aggregated niche metrics
+            min_jobs: Minimum number of job offers
+            max_jobs: Maximum number of job offers
+            
+        Returns:
+            Filtered and sorted DataFrame of viable niches
+        """
+        return df[
+            (df['Liczba_Ofert'] >= min_jobs) &
+            (df['Liczba_Ofert'] <= max_jobs) &
+            (df['Procent_Ofert_Z_Widelkami'] >= self.MIN_SALARY_TRANSPARENCY_PERCENT)
+        ].sort_values(
+            by=['Mediana_Zarobkow', 'Procent_Ofert_Z_Widelkami', 'Sredni_Czas_Zatrudnienia'],
+            ascending=[False, False, True]
+        )
+
 
     def get_blue_ocean_niches(self, min_jobs: int = 15, max_jobs: int = 70) -> pd.DataFrame:
         """
         Fetches data from the database and performs analysis to find "Blue Ocean" niches.
-        Uses median imputation for missing salaries and calculates the market exposure time 
+        Uses median imputation for missing salaries and calculates the market exposure time
         of job postings.
         
         Args:
@@ -215,91 +387,34 @@ class DatabaseHandler:
             max_jobs: Maximum number of job offers above which the market is considered saturated.
             
         Returns:
-            pd.DataFrame: A summary of potential niches, sorted by highest attractiveness.
+            pd.DataFrame: A summary of potential niches with the following columns:
+                - Technologia_Pojedyncza: Technology name
+                - Liczba_Ofert: Number of job offers
+                - Mediana_Zarobkow: Median salary
+                - Sredni_Czas_Zatrudnienia: Average time on market (days)
+                - Procent_Ofert_Z_Widelkami: Percentage of offers with salary ranges (0-100)
+                
+            Results are filtered to include only technologies with:
+                - At least 10% of offers having salary information (salary transparency threshold)
+                - Job count between min_jobs and max_jobs
+                
+            Sorted by: Median salary (desc), Salary transparency % (desc), Time on market (asc)
         """
         # Fetch data as a list of dictionaries using the existing method
         jobs_data = self.get_all_jobs()
         
         if not jobs_data:
-            return pd.DataFrame() # Return an empty DataFrame if the database is empty
+            return pd.DataFrame()  # Return an empty DataFrame if the database is empty
 
+        # Process data through the refactored pipeline
         df = pd.DataFrame(jobs_data)
-
-        df['Firma_Znormalizowana'] = df['Firma'].apply(self.__normalize_company_name)
-
-        df = df.drop_duplicates(
-            keep='first'
-        )
-
-        # --- STEP 1: DATA CLEANING AND FINANCIAL IMPUTATION ---
-        df['Wynagrodzenie Od'] = pd.to_numeric(df['Wynagrodzenie Od'], errors='coerce')
-        df['Wynagrodzenie Do'] = pd.to_numeric(df['Wynagrodzenie Do'], errors='coerce')
-
-        df['Podane_Widelki'] = df['Wynagrodzenie Od'].notna() | df['Wynagrodzenie Do'].notna()
-
-        # Fill missing values with the median grouped by category
-        # (Using transform to preserve the original DataFrame shape)
-        df['Wynagrodzenie Od'] = df.groupby('Kategoria')['Wynagrodzenie Od'].transform(lambda x: x.fillna(x.median()))
-        df['Wynagrodzenie Do'] = df.groupby('Kategoria')['Wynagrodzenie Do'].transform(lambda x: x.fillna(x.median()))
-
-        # If there are still missing values after group median imputation, fill them with the overall median
-        df['Wynagrodzenie Od'] = df['Wynagrodzenie Od'].fillna(df['Wynagrodzenie Od'].median())
-        df['Wynagrodzenie Do'] = df['Wynagrodzenie Do'].fillna(df['Wynagrodzenie Do'].median())
+        df = self._deduplicate_jobs(df)
+        df = self._prepare_salary_data(df)
+        df = self._calculate_market_time(df)
+        df_exploded = self._explode_technologies(df)
+        niche_analysis = self._aggregate_niche_metrics(df_exploded)
         
-        # Calculate the average salary for a given position
-        df['Srednia_Kwota'] = (df['Wynagrodzenie Od'] + df['Wynagrodzenie Do']) / 2
-
-        # --- STEP 2: CALCULATING TIME ON MARKET (DEMAND PROXY) ---
-        df['Utworzono'] = pd.to_datetime(df['Utworzono'], utc=True)
-        df['Scraped At'] = pd.to_datetime(df['Scraped At'], utc=True)
-        
-        # Convert date difference to days (yields NaN if a date is missing)
-        df['Czas_Na_Rynku_Dni'] = (df['Scraped At'] - df['Utworzono']).dt.days
-
-        # --- STEP 3: TECHNOLOGY TOKENIZATION ---
-        df_tech = df.dropna(subset=['Technologie']).copy()
-        
-        # Convert strings to lists (splitting by comma)
-        df_tech['Technologia_Pojedyncza'] = df_tech['Technologie'].astype(str).str.split(',')
-        
-        # Explode - creates a separate row for each technology in the list (cloning the rest of the data)
-        df_exploded = df_tech.explode('Technologia_Pojedyncza')
-        
-        # Text normalization (lowercase, stripping whitespaces)
-        df_exploded['Technologia_Pojedyncza'] = df_exploded['Technologia_Pojedyncza'].str.strip().str.lower()
-        
-        # Define a list of generic tags to filter out (these are not specific technologies and may indicate missing data)
-        generic_tags = [
-            'brak danych', 'english', 'angielski', 'agile', 'scrum', 'git', 
-            'jira', 'confluence', 'communication', 'team player', 
-        ]
-
-        # Filter out tags indicating missing data that were set in get_all_jobs()
-        df_exploded = df_exploded[~df_exploded['Technologia_Pojedyncza'].isin(generic_tags)]
-
-        # --- STEP 4: NICHE CONSOLIDATION ---
-        niche_analysis = df_exploded.groupby('Technologia_Pojedyncza').agg(
-            Liczba_Ofert=('ID', 'count'),
-            Mediana_Zarobkow=('Srednia_Kwota', 'median'),
-            Sredni_Czas_Zatrudnienia=('Czas_Na_Rynku_Dni', 'mean'),
-            Procent_Ofert_Z_Widelkami=('Podane_Widelki', 'mean')
-        ).reset_index()
-
-        niche_analysis['Procent_Ofert_Z_Widelkami'] = (niche_analysis['Procent_Ofert_Z_Widelkami'] * 100).round(1)
-
-        # --- STEP 5: FILTERING ---
-        potencjalne_nisze = niche_analysis[
-            (niche_analysis['Liczba_Ofert'] >= min_jobs) & 
-            (niche_analysis['Liczba_Ofert'] <= max_jobs) &
-            # Avoid niches where salary data is likely missing (less than 10% of offers with salary info)
-            (niche_analysis['Procent_Ofert_Z_Widelkami'] >= 10.0)
-        ].sort_values(
-            by=['Mediana_Zarobkow', 'Procent_Ofert_Z_Widelkami', 'Sredni_Czas_Zatrudnienia'], 
-            ascending=[False, False, True]
-        )
-
-
-        return potencjalne_nisze
+        return self._filter_viable_niches(niche_analysis, min_jobs, max_jobs)
     
     def __normalize_company_name(self, name: str) -> str:
         if pd.isna(name) or name == "Brak danych":
