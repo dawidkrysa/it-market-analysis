@@ -20,7 +20,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-CHANGE_ME}:${POSTGRES_PASSWORD:-CHANGE_ME}@db:5432/${POSTGRES_DB:-CHANGE_ME}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-CHANGE_ME}:${POSTGRES_PASSWORD:-CHANGE_ME}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB:-CHANGE_ME}
 
   db:
     image: postgres:18-alpine
