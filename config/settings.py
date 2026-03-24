@@ -18,6 +18,7 @@ class Settings:
         'DATABASE_URL', 
         'postgresql://navigator:DeepDive_2026_Secure@db:5432/blue_ocean_db'
     )
+
     
     @classmethod
     def validate(cls) -> None:
