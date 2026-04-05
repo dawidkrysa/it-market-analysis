@@ -1,23 +1,31 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from scipy import stats
 from utils.db_handler import DatabaseHandler
 
-# Header and description
-st.title("📊 Analiza Korelacji: Niszowość Technologii vs Wynagrodzenia")
+# --- Konfiguracja i Nagłówek ---
+st.title("📊 Analiza Korelacji: Niszowość vs Wynagrodzenia")
 
 st.markdown("""
-**Pytanie badawcze:** Czy istnieje statystycznie istotna zależność między charakterystykami niszy technologicznej 
-(liczba ofert, czas na rynku) a wysokością oferowanego wynagrodzenia?
+**Cel analizy:** Weryfikujemy, czy strategia "Błękitnego Oceanu" ma rzeczywiste pokrycie w danych finansowych polskiego rynku IT. Sprawdzamy dwie kluczowe hipotezy badawcze:
 
-**Hipotezy do weryfikacji:**
-1. **Liczba ofert vs Wynagrodzenie:** Czy technologie z mniejszą liczbą ofert (bardziej niszowe) oferują wyższe wynagrodzenia?
-2. **Czas na rynku vs Wynagrodzenie:** Czy oferty pozostające dłużej aktywne (trudniejsze do zapełnienia) oferują wyższe wynagrodzenia?
+1. **Hipoteza Niszowości (Podaż):** Zakładamy, że rzadkie technologie (niski wybór ofert) wymuszają na pracodawcach oferowanie wyższych stawek z powodu trudności w znalezieniu specjalisty.
+2. **Hipoteza Deficytu (Czas):** Zakładamy, że ogłoszenia, które najdłużej "wiszą" na rynku (najtrudniejsze do obsadzenia), oferują wyższe wynagrodzenia jako formę przyciągnięcia talentów.
 """)
 
-# Init database handler with caching
+with st.expander("❓ Słowniczek pojęć statystycznych (Rozwiń, jeśli potrzebujesz)"):
+    st.markdown("""
+    * **Korelacja (ρ / τ):** Wynik od -1 do 1. 
+      * Wartość blisko **1** oznacza, że gdy rośnie jedna rzecz, rośnie też druga (np. więcej ofert = wyższa płaca).
+      * Wartość blisko **-1** oznacza, że gdy jedna rośnie, druga maleje (np. więcej ofert = niższa płaca).
+      * Wartość blisko **0** to brak związku.
+    * **Wartość p (p-value):** Prawdopodobieństwo, że nasz wynik to tylko zbieg okoliczności (szum w danych).
+      * **p < 0.05** oznacza, że mamy mniej niż 5% szans na przypadek. Uznajemy wtedy wynik za **istotny statystycznie** (prawdziwy trend).
+    * **Test Spearmana / Kendalla:** Dwa różne wzory matematyczne do liczenia korelacji. Używamy ich, ponieważ zarobki w IT nie rosną idealnie "od linijki", a te testy świetnie radzą sobie z takimi danymi.
+    """)
+
+# --- Inicjalizacja Bazy Danych ---
 @st.cache_resource
 def get_db_handler():
     return DatabaseHandler()
@@ -28,43 +36,27 @@ except Exception as e:
     st.error(f"❌ Błąd połączenia z bazą danych: {e}")
     st.stop()
 
-# Sidebar parameters
-st.sidebar.markdown("### Parametry analizy")
-min_jobs = st.sidebar.slider("Minimalna liczba ofert", min_value=1, max_value=50, value=10, step=1)
-max_jobs = st.sidebar.slider("Maksymalna liczba ofert", min_value=30, max_value=300, value=150, step=10)
+# --- Panel Boczny (Sidebar) ---
+st.sidebar.markdown("### Wielkość rynku")
+min_jobs = st.sidebar.slider("Min. liczba ofert (wiarygodność)", 1, 50, 10, 1, help="Odrzuca technologie, które pojawiły się np. tylko raz (literówki, błędy).")
+max_jobs = st.sidebar.slider("Max. liczba ofert (nasycenie)", 30, 300, 150, 10, help="Górny limit niszy. Powyżej tej wartości zaczyna się 'Czerwony Ocean' (duża konkurencja).")
 
-st.sidebar.markdown("### Filtry wynagrodzeń")
-min_salary = st.sidebar.slider(
-    "Minimalna mediana (PLN)",
-    min_value=0, max_value=20000, value=1000, step=500,
-    help="Pozwala odrzucić błędy danych (np. oferty z zarobkami 0 PLN) lub darmowe staże."
-)
+st.sidebar.markdown("### Filtry anomalii płacowych")
+min_salary = st.sidebar.slider("Minimalna mediana (PLN)", 0, 20000, 1000, 500, help="Odrzuca darmowe staże i błędy danych wejściowych.")
+max_salary = st.sidebar.slider("Maksymalna mediana (PLN)", 10000, 50000, 20000, 1000, help="Odrzuca pojedyncze oferty dyrektorskie z kosmicznymi stawkami, które fałszują trend ogólny.")
 
-max_salary = st.sidebar.slider(
-    "Maksymalna mediana (PLN)",
-    min_value=10000, max_value=50000, value=20000, step=1000,
-    help="Pozwala odrzucić 'anegdoty' - pojedyncze oferty z kosmicznymi stawkami fałszującymi trend."
-)
-
-# Download and analyze data
-with st.spinner("Pobieranie danych z bazy... ⏳"):
+# --- Pobieranie i Filtrowanie Danych ---
+with st.spinner("Pobieranie i filtrowanie danych z bazy..."):
     try:
         df_niches = db.get_blue_ocean_niches(min_jobs=min_jobs, max_jobs=max_jobs)
     except Exception as e:
-        st.error(f"❌ Błąd podczas analizy danych: {e}")
+        st.error(f"❌ Błąd: {e}")
         st.stop()
 
-# Check if we have data
-if df_niches is None or df_niches.empty:
-    st.warning("⚠️ Baza danych jest pusta. Uruchom scrapery, aby zebrać dane z portali z ofertami pracy.")
-    st.info("💡 Użyj przycisku 'Uruchom scrapery' na stronie głównej lub uruchom je ręcznie z linii poleceń.")
+if df_niches is None or len(df_niches) < 3:
+    st.warning("⚠️ Zbyt mało danych do analizy (minimum to 3 technologie). Dostosuj suwaki w panelu bocznym.")
     st.stop()
 
-if len(df_niches) < 3:
-    st.warning(f"⚠️ Zbyt mało danych do przeprowadzenia analizy korelacji. Znaleziono {len(df_niches)} technologii. Wymagane minimum: 3. Zmień parametry w panelu bocznym.")
-    st.stop()
-
-# Prepare data - remove rows with missing values and apply salary filters
 correlation_data = df_niches.dropna(subset=['Liczba_Ofert', 'Sredni_Czas_Zatrudnienia', 'Mediana_Zarobkow']).copy()
 correlation_data = correlation_data[
     (correlation_data['Mediana_Zarobkow'] >= min_salary) &
@@ -72,292 +64,100 @@ correlation_data = correlation_data[
 ]
 
 if len(correlation_data) < 3:
-    st.warning(f"⚠️ Po zastosowaniu filtrów pozostało {len(correlation_data)} technologii. Wymagane minimum: 3. Zmień parametry filtrów w panelu bocznym.")
+    st.warning(f"⚠️ Po zastosowaniu filtrów płacowych pozostało tylko {len(correlation_data)} technologii. Rozszerz zakres.")
     st.stop()
 
-st.success(f"✅ Analiza obejmuje **{len(correlation_data)} technologii** z kompletnymi danymi (zakres wynagrodzeń: {min_salary:,} - {max_salary:,} PLN).")
+# --- Funkcja Pomocnicza dla Etykiet ---
+def get_significance_label(p_value):
+    if p_value < 0.001: return "🟢 Bardzo silnie istotna (p < 0.001)"
+    if p_value < 0.01:  return "🟢 Silnie istotna (p < 0.01)"
+    if p_value < 0.05:  return "🟡 Istotna statystycznie (p < 0.05)"
+    return "🔴 Nieistotna (przypadek)"
 
-# --- Analysis 1: Number of Offers vs Salary ---
+# ==========================================
+# ANALIZA 1: Liczba Ofert vs Wynagrodzenie
+# ==========================================
 st.markdown("---")
-st.header("1️⃣ Liczba Ofert vs Mediana Wynagrodzeń")
+st.header("1️⃣ Liczba Ofert vs Wynagrodzenie")
 
-st.markdown("""
-**Hipoteza:** Technologie bardziej niszowe (mniej ofert) mogą oferować wyższe wynagrodzenia ze względu na 
-niedobór specjalistów i mniejszą konkurencję między kandydatami.
-""")
+spearman_off, spearman_off_p = stats.spearmanr(correlation_data['Liczba_Ofert'], correlation_data['Mediana_Zarobkow'])
+kendall_off, kendall_off_p = stats.kendalltau(correlation_data['Liczba_Ofert'], correlation_data['Mediana_Zarobkow'])
 
-# Calculate correlations for offers vs salary
-spearman_offers, spearman_offers_p = stats.spearmanr(
-    correlation_data['Liczba_Ofert'], 
-    correlation_data['Mediana_Zarobkow']
-)
-
-kendall_offers, kendall_offers_p = stats.kendalltau(
-    correlation_data['Liczba_Ofert'], 
-    correlation_data['Mediana_Zarobkow']
-)
-
-# Display results
 col1, col2 = st.columns(2)
-
 with col1:
-    st.markdown("### 🔢 Korelacja Spearmana")
-    st.metric("Współczynnik ρ (rho)", f"{spearman_offers:.4f}")
-    st.metric("Wartość p", f"{spearman_offers_p:.4f}")
-    
-    if spearman_offers_p < 0.001:
-        significance = "🟢 **Bardzo silnie istotna** (p < 0.001)"
-    elif spearman_offers_p < 0.01:
-        significance = "🟢 **Silnie istotna** (p < 0.01)"
-    elif spearman_offers_p < 0.05:
-        significance = "🟡 **Istotna** (p < 0.05)"
-    else:
-        significance = "🔴 **Nieistotna statystycznie** (p ≥ 0.05)"
-    
-    st.markdown(f"**Istotność:** {significance}")
-
+    st.metric(
+        "Korelacja Spearmana (ρ)", 
+        f"{spearman_off:.3f}", 
+        get_significance_label(spearman_off_p),
+        help="Główny wskaźnik siły związku między liczbą ofert a płacą."
+    )
 with col2:
-    st.markdown("### 🔢 Korelacja Kendalla")
-    st.metric("Współczynnik τ (tau)", f"{kendall_offers:.4f}")
-    st.metric("Wartość p", f"{kendall_offers_p:.4f}")
-    
-    if kendall_offers_p < 0.001:
-        significance = "🟢 **Bardzo silnie istotna** (p < 0.001)"
-    elif kendall_offers_p < 0.01:
-        significance = "🟢 **Silnie istotna** (p < 0.01)"
-    elif kendall_offers_p < 0.05:
-        significance = "🟡 **Istotna** (p < 0.05)"
-    else:
-        significance = "🔴 **Nieistotna statystycznie** (p ≥ 0.05)"
-    
-    st.markdown(f"**Istotność:** {significance}")
+    st.metric(
+        "Korelacja Kendalla (τ)", 
+        f"{kendall_off:.3f}", 
+        get_significance_label(kendall_off_p),
+        help="Test pomocniczy, często dokładniejszy dla małych próbek danych."
+    )
 
-# Visualization: Scatter plot for offers vs salary
 fig1 = px.scatter(
-    correlation_data,
-    x='Liczba_Ofert',
-    y='Mediana_Zarobkow',
-    hover_data=['Technologia_Pojedyncza', 'Sredni_Czas_Zatrudnienia'],
-    labels={
-        'Liczba_Ofert': 'Liczba Ofert',
-        'Mediana_Zarobkow': 'Mediana Wynagrodzeń (PLN)',
-        'Technologia_Pojedyncza': 'Technologia',
-        'Sredni_Czas_Zatrudnienia': 'Średni czas na rynku (dni)'
-    },
-    title=f"Liczba Ofert vs Mediana Wynagrodzeń (Spearman ρ={spearman_offers:.3f}, p={spearman_offers_p:.4f})"
+    correlation_data, x='Liczba_Ofert', y='Mediana_Zarobkow',
+    hover_data={'Technologia_Pojedyncza': True, 'Sredni_Czas_Zatrudnienia': ':.1f', 'Mediana_Zarobkow': ':.0f'},
+    labels={'Liczba_Ofert': 'Liczba Ofert na Rynku', 'Mediana_Zarobkow': 'Mediana Wynagrodzeń (PLN)', 'Technologia_Pojedyncza': 'Technologia'},
+    trendline="ols",
+    title="Wizualizacja trendu: Podaż ofert a zarobki"
 )
-fig1.update_traces(marker=dict(size=10, opacity=0.6))
+fig1.update_traces(marker=dict(size=10, opacity=0.7))
 st.plotly_chart(fig1, use_container_width=True)
 
-# Interpretation for offers vs salary
-st.markdown("### 📖 Interpretacja")
-both_significant_offers = spearman_offers_p < 0.05 and kendall_offers_p < 0.05
-
-if both_significant_offers:
-    if spearman_offers < 0:
-        st.success(f"""
-        ✅ **Wniosek:** Oba testy potwierdzają istotną statystycznie **ujemną korelację** między liczbą ofert 
-        a medianą wynagrodzeń (Spearman ρ={spearman_offers:.3f}, p={spearman_offers_p:.4f}; 
-        Kendall τ={kendall_offers:.3f}, p={kendall_offers_p:.4f}).
-        
-        **Praktyczne znaczenie:** Technologie bardziej niszowe (mniej ofert) rzeczywiście oferują wyższe wynagrodzenia. 
-        To potwierdza strategię "błękitnego oceanu" – specjalizacja w rzadszych technologiach może być bardziej opłacalna.
-        """)
+# Interpretacja
+if spearman_off_p < 0.05:
+    if spearman_off < 0:
+        st.success("**Wniosek (Potwierdzenie hipotezy):** Statystyka wykazuje ujemną korelację. Mniej popularne technologie (nisze) faktycznie oferują wyższe wynagrodzenia w badanej próbie.")
     else:
-        st.warning(f"""
-        ⚠️ **Wniosek:** Oba testy potwierdzają istotną statystycznie **dodatnią korelację** między liczbą ofert 
-        a medianą wynagrodzeń (Spearman ρ={spearman_offers:.3f}, p={spearman_offers_p:.4f}; 
-        Kendall τ={kendall_offers:.3f}, p={kendall_offers_p:.4f}).
-        
-        **Praktyczne znaczenie:** Technologie z większą liczbą ofert oferują wyższe wynagrodzenia. 
-        To może sugerować, że popularne technologie są również lepiej płatne, prawdopodobnie ze względu na 
-        wysokie zapotrzebowanie rynkowe.
-        """)
+        st.warning("**Wniosek (Odrzucenie hipotezy):** Statystyka wykazuje dodatnią korelację. To technologie z największą liczbą ofert płacą najlepiej, co przeczy założeniom błękitnego oceanu.")
 else:
-    st.info(f"""
-    ℹ️ **Wniosek:** Nie wykryto statystycznie istotnej korelacji między liczbą ofert a medianą wynagrodzeń 
-    (Spearman p={spearman_offers_p:.4f}; Kendall p={kendall_offers_p:.4f}).
-    
-    **Praktyczne znaczenie:** Niszowość technologii (mierzona liczbą ofert) nie jest silnie powiązana 
-    z wysokością wynagrodzenia w analizowanej próbie. Inne czynniki mogą mieć większy wpływ na zarobki.
-    """)
+    st.info("**Wniosek (Brak dowodów):** Obecne dane nie wykazują statystycznego związku między tym, jak rzadka jest technologia, a tym, ile się w niej zarabia (wynik może być dziełem przypadku).")
 
-# --- Analysis 2: Time on Market vs Salary ---
+# ==========================================
+# ANALIZA 2: Czas na Rynku vs Wynagrodzenie
+# ==========================================
 st.markdown("---")
-st.header("2️⃣ Czas na Rynku vs Mediana Wynagrodzeń")
+st.header("2️⃣ Czas na Rynku vs Wynagrodzenie")
 
-st.markdown("""
-**Hipoteza:** Oferty pozostające dłużej aktywne na rynku (trudniejsze do zapełnienia) mogą oferować wyższe 
-wynagrodzenia jako sposób przyciągnięcia kandydatów w warunkach niedoboru specjalistów.
-""")
+spearman_time, spearman_time_p = stats.spearmanr(correlation_data['Sredni_Czas_Zatrudnienia'], correlation_data['Mediana_Zarobkow'])
+kendall_time, kendall_time_p = stats.kendalltau(correlation_data['Sredni_Czas_Zatrudnienia'], correlation_data['Mediana_Zarobkow'])
 
-# Calculate correlations for time vs salary
-spearman_time, spearman_time_p = stats.spearmanr(
-    correlation_data['Sredni_Czas_Zatrudnienia'], 
-    correlation_data['Mediana_Zarobkow']
-)
+col3, col4 = st.columns(2)
+with col3:
+    st.metric(
+        "Korelacja Spearmana (ρ)", 
+        f"{spearman_time:.3f}", 
+        get_significance_label(spearman_time_p),
+        help="Sprawdza, czy im dłużej wisi oferta, tym wyższa jest mediana płac."
+    )
+with col4:
+    st.metric(
+        "Korelacja Kendalla (τ)", 
+        f"{kendall_time:.3f}", 
+        get_significance_label(kendall_time_p)
+    )
 
-kendall_time, kendall_time_p = stats.kendalltau(
-    correlation_data['Sredni_Czas_Zatrudnienia'], 
-    correlation_data['Mediana_Zarobkow']
-)
-
-# Display results
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("### 🔢 Korelacja Spearmana")
-    st.metric("Współczynnik ρ (rho)", f"{spearman_time:.4f}")
-    st.metric("Wartość p", f"{spearman_time_p:.4f}")
-    
-    if spearman_time_p < 0.001:
-        significance = "🟢 **Bardzo silnie istotna** (p < 0.001)"
-    elif spearman_time_p < 0.01:
-        significance = "🟢 **Silnie istotna** (p < 0.01)"
-    elif spearman_time_p < 0.05:
-        significance = "🟡 **Istotna** (p < 0.05)"
-    else:
-        significance = "🔴 **Nieistotna statystycznie** (p ≥ 0.05)"
-    
-    st.markdown(f"**Istotność:** {significance}")
-
-with col2:
-    st.markdown("### 🔢 Korelacja Kendalla")
-    st.metric("Współczynnik τ (tau)", f"{kendall_time:.4f}")
-    st.metric("Wartość p", f"{kendall_time_p:.4f}")
-    
-    if kendall_time_p < 0.001:
-        significance = "🟢 **Bardzo silnie istotna** (p < 0.001)"
-    elif kendall_time_p < 0.01:
-        significance = "🟢 **Silnie istotna** (p < 0.01)"
-    elif kendall_time_p < 0.05:
-        significance = "🟡 **Istotna** (p < 0.05)"
-    else:
-        significance = "🔴 **Nieistotna statystycznie** (p ≥ 0.05)"
-    
-    st.markdown(f"**Istotność:** {significance}")
-
-# Visualization: Scatter plot for time vs salary
 fig2 = px.scatter(
-    correlation_data,
-    x='Sredni_Czas_Zatrudnienia',
-    y='Mediana_Zarobkow',
-    hover_data=['Technologia_Pojedyncza', 'Liczba_Ofert'],
-    labels={
-        'Sredni_Czas_Zatrudnienia': 'Średni Czas na Rynku (Dni)',
-        'Mediana_Zarobkow': 'Mediana Wynagrodzeń (PLN)',
-        'Technologia_Pojedyncza': 'Technologia',
-        'Liczba_Ofert': 'Liczba ofert'
-    },
-    title=f"Czas na Rynku vs Mediana Wynagrodzeń (Spearman ρ={spearman_time:.3f}, p={spearman_time_p:.4f})"
+    correlation_data, x='Sredni_Czas_Zatrudnienia', y='Mediana_Zarobkow',
+    hover_data={'Technologia_Pojedyncza': True, 'Liczba_Ofert': True, 'Mediana_Zarobkow': ':.0f'},
+    labels={'Sredni_Czas_Zatrudnienia': 'Średni Czas Aktywności Oferty (Dni)', 'Mediana_Zarobkow': 'Mediana Wynagrodzeń (PLN)', 'Technologia_Pojedyncza': 'Technologia'},
+    color_discrete_sequence=['coral'],
+    trendline="ols",
+    title="Wizualizacja trendu: Czas wakatu a zarobki"
 )
-fig2.update_traces(marker=dict(size=10, opacity=0.6, color='coral'))
+fig2.update_traces(marker=dict(size=10, opacity=0.7))
 st.plotly_chart(fig2, use_container_width=True)
 
-# Interpretation for time vs salary
-st.markdown("### 📖 Interpretacja")
-both_significant_time = spearman_time_p < 0.05 and kendall_time_p < 0.05
-
-if both_significant_time:
+# Interpretacja
+if spearman_time_p < 0.05:
     if spearman_time > 0:
-        st.success(f"""
-        ✅ **Wniosek:** Oba testy potwierdzają istotną statystycznie **dodatnią korelację** między czasem na rynku 
-        a medianą wynagrodzeń (Spearman ρ={spearman_time:.3f}, p={spearman_time_p:.4f}; 
-        Kendall τ={kendall_time:.3f}, p={kendall_time_p:.4f}).
-        
-        **Praktyczne znaczenie:** Oferty pozostające dłużej aktywne rzeczywiście oferują wyższe wynagrodzenia. 
-        To potwierdza hipotezę, że wysokie płace są odpowiedzią na trudności w rekrutacji i niedobór specjalistów 
-        w danej niszy technologicznej.
-        """)
+        st.success("**Wniosek (Potwierdzenie hipotezy):** Statystyka wykazuje dodatnią korelację. Oferty, które najtrudniej obsadzić (wiszą najdłużej), faktycznie próbują kusić wyższymi stawkami.")
     else:
-        st.warning(f"""
-        ⚠️ **Wniosek:** Oba testy potwierdzają istotną statystycznie **ujemną korelację** między czasem na rynku 
-        a medianą wynagrodzeń (Spearman ρ={spearman_time:.3f}, p={spearman_time_p:.4f}; 
-        Kendall τ={kendall_time:.3f}, p={kendall_time_p:.4f}).
-        
-        **Praktyczne znaczenie:** Oferty z wyższymi wynagrodzeniami są szybciej zapełniane. 
-        To sugeruje, że wysokie płace skutecznie przyciągają kandydatów, lub że technologie z wyższymi 
-        zarobkami są bardziej popularne wśród specjalistów.
-        """)
+        st.warning("**Wniosek (Odrzucenie hipotezy):** Statystyka wykazuje ujemną korelację. Oferty z najwyższymi stawkami znikają z rynku najszybciej (są błyskawicznie obsadzane).")
 else:
-    st.info(f"""
-    ℹ️ **Wniosek:** Nie wykryto statystycznie istotnej korelacji między czasem na rynku a medianą wynagrodzeń 
-    (Spearman p={spearman_time_p:.4f}; Kendall p={kendall_time_p:.4f}).
-    
-    **Praktyczne znaczenie:** Czas, przez który oferta pozostaje aktywna, nie jest silnie powiązany 
-    z wysokością wynagrodzenia. Inne czynniki (np. popularność technologii, wymagania kompetencyjne, 
-    lokalizacja) mogą mieć większy wpływ na czas rekrutacji.
-    """)
-
-# --- Summary Section ---
-st.markdown("---")
-st.header("📋 Podsumowanie Analizy")
-
-summary_col1, summary_col2 = st.columns(2)
-
-with summary_col1:
-    st.markdown("### Liczba Ofert → Wynagrodzenie")
-    if both_significant_offers:
-        direction = "ujemna ↘️" if spearman_offers < 0 else "dodatnia ↗️"
-        st.markdown(f"**Status:** ✅ Korelacja {direction} istotna statystycznie")
-    else:
-        st.markdown("**Status:** ❌ Brak istotnej korelacji")
-    
-    st.markdown(f"- Spearman ρ: **{spearman_offers:.3f}** (p={spearman_offers_p:.4f})")
-    st.markdown(f"- Kendall τ: **{kendall_offers:.3f}** (p={kendall_offers_p:.4f})")
-
-with summary_col2:
-    st.markdown("### Czas na Rynku → Wynagrodzenie")
-    if both_significant_time:
-        direction = "dodatnia ↗️" if spearman_time > 0 else "ujemna ↘️"
-        st.markdown(f"**Status:** ✅ Korelacja {direction} istotna statystycznie")
-    else:
-        st.markdown("**Status:** ❌ Brak istotnej korelacji")
-    
-    st.markdown(f"- Spearman ρ: **{spearman_time:.3f}** (p={spearman_time_p:.4f})")
-    st.markdown(f"- Kendall τ: **{kendall_time:.3f}** (p={kendall_time_p:.4f})")
-
-# Technical notes
-st.markdown("---")
-with st.expander("ℹ️ Informacje techniczne o testach statystycznych"):
-    st.markdown(f"""
-    **Wielkość próby:** {len(correlation_data)} technologii z kompletnymi danymi
-    
-    **Korelacja Spearmana (ρ):**
-    - Test nieparametryczny oparty na rangach
-    - Zakres: od -1 (idealna korelacja ujemna) do +1 (idealna korelacja dodatnia)
-    - Odporny na wartości odstające i rozkłady nienormalne
-    - Wykrywa monotoniczną zależność (niekoniecznie liniową)
-    
-    **Korelacja Kendalla (τ):**
-    - Alternatywny test nieparametryczny oparty na rangach
-    - Zakres: od -1 do +1
-    - Bardziej konserwatywny niż Spearman (zwykle niższe wartości współczynnika)
-    - Lepiej radzi sobie z małymi próbami i wieloma wartościami równymi
-    - Interpretacja: prawdopodobieństwo zgodności minus prawdopodobieństwo niezgodności par obserwacji
-    
-    **Wartość p (p-value):**
-    - Prawdopodobieństwo uzyskania obserwowanego wyniku (lub bardziej ekstremalnego) przy założeniu braku korelacji (hipoteza zerowa)
-    - **p < 0.05:** wynik istotny statystycznie (odrzucamy hipotezę o braku korelacji)
-    - **p < 0.01:** wynik silnie istotny statystycznie
-    - **p < 0.001:** wynik bardzo silnie istotny statystycznie
-    
-    **Siła korelacji (wartości bezwzględne):**
-    - **Spearman:** |ρ| ≥ 0.7 (silna), 0.4-0.7 (umiarkowana), 0.2-0.4 (słaba), < 0.2 (bardzo słaba)
-    - **Kendall:** |τ| ≥ 0.5 (silna), 0.3-0.5 (umiarkowana), 0.1-0.3 (słaba), < 0.1 (bardzo słaba)
-    
-    **Dlaczego testy nieparametryczne?**
-    - Nie wymagają założenia o normalności rozkładu danych
-    - Odporne na wartości odstające (outliers)
-    - Odpowiednie dla danych rankingowych lub porządkowych
-    - Bardziej wiarygodne dla małych i średnich prób
-    """)
-
-# Data table
-st.markdown("---")
-st.subheader("📊 Dane użyte w analizie")
-st.caption(f"Zastosowane filtry: Liczba ofert: {min_jobs}-{max_jobs} | Mediana wynagrodzeń: {min_salary:,}-{max_salary:,} PLN")
-display_df = correlation_data[['Technologia_Pojedyncza', 'Liczba_Ofert', 'Mediana_Zarobkow', 'Sredni_Czas_Zatrudnienia', 'Procent_Ofert_Z_Widelkami']].copy()
-display_df.columns = ['Technologia', 'Liczba Ofert', 'Mediana Zarobków (PLN)', 'Średni Czas na Rynku (dni)', 'Transparentność (%)']
-display_df = display_df.sort_values('Mediana Zarobków (PLN)', ascending=False)
-st.dataframe(display_df, use_container_width=True, hide_index=True)
+    st.info("**Wniosek (Brak dowodów):** Nie ma mocnych dowodów na to, że czas aktywności oferty ma matematyczny związek z wysokością proponowanego w niej wynagrodzenia.")
