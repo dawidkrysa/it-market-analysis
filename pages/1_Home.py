@@ -1,39 +1,71 @@
-"""Radar Mikro-nisz - Main Streamlit Page.
+"""
+Radar Mikro-nisz - Main Streamlit Page.
 
 Strona domowa aplikacji Streamlit, która wyświetla szczegóły dot. projektu
 oraz wprowadzenie do analizy rynku pracy IT.
 """
 
 import streamlit as st
-from streamlit.delta_generator import DeltaGenerator
 
-# Podział na kolumny dla tytułu i logo
-# Proporcje [4, 1] oznaczają, że lewa kolumna jest 4 razy szersza od prawej
-col1: DeltaGenerator
-col2: DeltaGenerator
+# Konfiguracja strony (powinna być zawsze na samej górze pliku wejściowego)
+st.set_page_config(
+    page_title="Radar Mikro-Nisz IT",
+    page_icon="🧭",
+    layout="wide"
+)
+
+# --- Nagłówek i Logo ---
 col1, col2 = st.columns([4, 1], vertical_alignment="center")
 
 with col1:
-    st.title("Wpływ niszowości technologii IT na opłacalność i czas zatrudnienia")
+    # Dodano główny, krótki tytuł i przeniesiono długi tytuł akademicki do subheadera
+    st.title("🧭 Radar Mikro-Nisz IT")
+    st.subheader("Wpływ niszowości technologii na opłacalność i czas zatrudnienia")
 
 with col2:
-    # Parametr width pozwala wymusić stałą szerokość obrazka
-    st.image("assets/wsb_logo.png", width=150)
+    try:
+        st.image("assets/wsb_logo.png", width=150)
+    except:
+        st.caption("[Logo Uczelni]") # Zabezpieczenie, jeśli ścieżka do pliku nie zadziała
 
 st.markdown("---")
 
-st.write("""
-Witamy w interaktywnym raporcie naszego projektu! 
-Analizujemy tu zjawiska asymetrii informacji i bezrobocia strukturalnego na obecnym rynku pracy IT.
+# --- Wprowadzenie ---
+st.markdown("""
+Witamy w interaktywnym raporcie analitycznym!  
+Aplikacja ta bada zjawiska **asymetrii informacji** i **bezrobocia strukturalnego** na współczesnym rynku pracy IT w Polsce.
 
-**Czego dowiesz się z tej aplikacji?**
-* Jak trendy makroekonomiczne wpłynęły na branżę.
-* Które technologie to **Błękitne Oceany** (wysoki popyt, niska podaż), a które to **Czerwone Oceany** (przesycenie).
-* Czy statystyka potwierdza, że za niszowe umiejętności płaci się więcej.
-* Jak wygląda twardy, finansowy zwrot z inwestycji (ROI) w naukę niszowej technologii.
-
-Wybierz interesującą Cię sekcję z menu po lewej stronie.
+Zamiast zgadywać, w jakim kierunku rozwijać karierę, opieramy się na twardych danych pozyskanych z tysięcy ogłoszeń o pracę.
 """)
 
-st.info("Projekt zrealizowany w ramach przedmiotu Projekt Semestralny II.") 
-st.info("Zespół: Dawid Krysa, Wojciech Pomarkiewicz, Wiktor Daniel, Krzysztof Krajewski")
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("### 📌 Czego dowiesz się z tej aplikacji?")
+
+# --- Karty nawigacyjne (Feature Cards) zamiast zwykłej listy ---
+f_col1, f_col2 = st.columns(2)
+
+with f_col1:
+    st.info("""
+    **🌊 Strategia Błękitnego Oceanu** Identyfikacja technologii o wysokim popycie i niskiej podaży kandydatów. Odróżniamy rynkowe nisze od przesyconych 'Czerwonych Oceanów'.
+    """)
+    st.success("""
+    **📈 Weryfikacja Hipotez (Korelacje)** Statystyczne sprawdzenie z użyciem testów Spearmana/Kendalla, czy za rzadkie kompetencje rynek faktycznie płaci premię.
+    """)
+
+with f_col2:
+    st.warning("""
+    **💰 Analiza Finansowa (ROI)** Kalkulacja twardego zwrotu z inwestycji w naukę konkretnych technologii. Ile kosztuje Cię utracony czas na naukę?
+    """)
+    st.error("""
+    **⚙️ Metodologia i Dane** Centrum dowodzenia silnikiem aplikacji. Podgląd na żywo do bazy danych oraz możliwość uruchomienia web scraperów.
+    """)
+
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("👈 **Wybierz interesującą Cię sekcję z menu bocznego, aby rozpocząć.**")
+
+# --- Stopka Akademicka ---
+st.markdown("---")
+# Używamy st.caption dla szarego, dyskretnego tekstu na dole strony zamiast krzyczących niebieskich st.info
+st.caption("""
+**Projekt zrealizowany w ramach przedmiotu Projekt Semestralny II.** 👨‍💻 **Zespół badawczy:** Dawid Krysa, Wojciech Pomarkiewicz, Wiktor Daniel, Krzysztof Krajewski
+""")

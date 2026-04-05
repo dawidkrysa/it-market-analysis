@@ -1,11 +1,25 @@
-streamlit
-beautifulsoup4
-lxml
-requests
+# Data Manipulation & Math
 pandas
 numpy
-sqlalchemy
-psycopg2-binary
-plotly
 scipy
 statsmodels
+
+# Web Scraping & Networking
+requests
+beautifulsoup4
+lxml
+
+# Database & Storage
+sqlalchemy
+psycopg2-binary
+
+# Visualization & UI
+streamlit
+plotly
+ipywidgets
+matplotlib
+seaborn
+
+# Jupyter Core
+jupyter
+ipykernel
