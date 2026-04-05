@@ -85,8 +85,41 @@ class DatabaseHandler:
     
     # Generic tags that don't represent specific technologies
     GENERIC_TECHNOLOGY_TAGS = frozenset([
-        'brak danych', 'english', 'angielski', 'agile', 'scrum', 'git',
-        'jira', 'confluence', 'communication', 'team player',
+        # Braki danych
+        'brak danych', 
+        
+        # Tryb i warunki pracy
+        'gotowość do pracy zmianowej', 'praca zdalna', 'praca hybrydowa', 
+        'praca stacjonarna', 'elastyczne godziny pracy',
+        
+        # Języki obce i kompetencje miękkie
+        'english', 'angielski', 'french', 'communication', 'team player', 
+        'negotiations skills', 'communication skills', 'analytical thinking', 
+        'analytical skills', 'problem solving', 'tech-savvy', 'zaangażowanie', 
+        'zdolności analityczne', 'ai interest',
+        
+        # Narzędzia i metodyki (uznane za generyczne w Twoim algorytmie)
+        'agile', 'scrum', 'git', 'jira', 'confluence', 'devops', 'docker', 
+        'kubernetes', 'ci/cd', 'itil', 'project management', 'agile project management',
+        
+        # Umiejętności biurowe i nietechniczne
+        'accounting', 'financial accounting', 'excel', 'ms excel', 'ms office', 
+        'office 365', 'microsoft office', 'powerpoint', 'ms project', 'rysunek techniczny',
+        
+        # Inne dziedziny i role biznesowe
+        'recruitment', 'tutoring', 'business analysis', 'business development', 
+        'customer support', 'helpdesk', 'customer experience (cx)', 'finance', 
+        'finanse', 'procurement', 'supply chain', 'ilustracja', 'grafika', 'pmo',
+        
+        # Zbyt ogólne pojęcia IT (tzw. buzzwords)
+        'pc hardware skills', 'znajomość systemów it', 'data visualization', 
+        'cloud computing', 'cloud', 'it support', 'it', 'it basics', 'security', 
+        'cybersecurity', 'programming', 'bazy danych', 'networking', 'network', 
+        'data', 'hardware', 'os', 'algorithms', 'math', 'matematyka',
+        
+        # Koncepcje testowania i inżynierii (zbyt ogólne)
+        'skalowalny kod', 'software testing concept', 'testing theory', 'testing', 
+        'manual testing', 'qa', 'automated testing', 'engineering principles', 'database design'
     ])
     
     def __init__(self, database_url: str = Settings.DATABASE_URL) -> None:
@@ -247,9 +280,17 @@ class DatabaseHandler:
         Returns:
             DataFrame with prepared salary data and tracking columns
         """
+        # Fill missing currency with "PLN" if the column exists
+        if 'Waluta' in df.columns:
+            df['Waluta'] = df['Waluta'].fillna("PLN")
+
         # Convert to numeric, coercing errors to NaN
         df['Wynagrodzenie Od'] = pd.to_numeric(df['Wynagrodzenie Od'], errors='coerce')
         df['Wynagrodzenie Do'] = pd.to_numeric(df['Wynagrodzenie Do'], errors='coerce')
+
+        # Convert outliers (hourly rates < 1000) to monthly salary
+        df.loc[df["Wynagrodzenie Od"] < 1000, "Wynagrodzenie Od"] *= 168
+        df.loc[df["Wynagrodzenie Do"] < 1000, "Wynagrodzenie Do"] *= 168
         
         # Track which rows have real salary data (both from and to are present)
         df['Ma_Realne_Wynagrodzenie'] = (
@@ -310,6 +351,9 @@ class DatabaseHandler:
         # Text normalization (lowercase, stripping whitespaces)
         df_exploded['Technologia_Pojedyncza'] = df_exploded['Technologia_Pojedyncza'].str.strip().str.lower()
         
+        # Filter out rows where technology is missing or marked as "brak danych"
+        df_exploded = df_exploded[df_exploded['Technologia_Pojedyncza'] != "brak danych"]
+
         # Filter out generic tags using the class constant
         df_exploded = df_exploded[~df_exploded['Technologia_Pojedyncza'].isin(self.GENERIC_TECHNOLOGY_TAGS)]
         
