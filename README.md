@@ -1,189 +1,147 @@
 # Radar Mikro-nisz - IT Job Market Analysis
 
-Multi-page Streamlit application for analyzing IT job market niches vs mainstream opportunities.
+Multi-page Streamlit application for analyzing IT job market niches and mainstream opportunities in the Polish IT labor market.
 
-## 🚀 Quick Start (Windows)
+## 🚀 Quick Start
 
 ### Prerequisites
-- Docker Desktop installed and running
+- Docker installed and running
 - Git
 
 ### Setup & Run
 
-1. **Clone the repository**
-
-2. **Copy environment file:**
-   ```powershell
-   copy .env.example .env
+1. Clone the repository.
+2. Copy the environment template:
+   ```bash
+   cp .env.example .env
+   ```
+3. Start the application:
+   ```bash
+   docker-compose up --build
+   ```
+4. Open the app in your browser:
+   ```text
+   http://localhost:8501
    ```
 
-3. **Start development environment:**
-   
-   **Option A: VS Code Tasks (Recommended)**
-   - Press `Ctrl+Shift+B` or
-   - Press `Ctrl+Shift+P` → "Tasks: Run Task" → "Start Dev Environment"
+### Notes
+- Source code changes are mounted into the container and should reload automatically.
+- If the app does not restart cleanly, stop containers and run `docker-compose down` before starting again.
 
-   **Option B: Direct Docker command**
-   ```powershell
-   docker-compose -f docker-compose.dev.yml up
-   ```
+## 🛠️ Common Commands
 
-4. **Access the application:**
-   - Open browser: http://localhost:8501
-   - Changes to `.py` files will auto-reload! ✨
+```bash
+# Start application
+docker-compose up --build
 
-## 🛠️ Development Commands
-
-### VS Code Tasks (Recommended)
-
-Press `Ctrl+Shift+P` → "Tasks: Run Task" or `Ctrl+Shift+B` for quick build. Available tasks:
-
-**Development:**
-- **Start Dev Environment** (`Ctrl+Shift+B`) - Launch with hot reload
-- **Stop Dev Environment** - Stop all containers
-- **Full Restart** - Sequential stop and start
-- **Rebuild Containers** - Full rebuild with no cache
-
-**Monitoring:**
-- **View Logs** - Monitor application logs in real-time
-
-**Testing & Maintenance:**
-- **Run Tests** - Execute pytest in container
-- **Install Dependencies** - Update packages from requirements.txt
-- **Run Scraper** - Execute all scrapers via ScraperManager
-- **Database Shell** - Open PostgreSQL interactive shell
-
-### Direct Docker Commands
-
-```powershell
-# Start development with hot reload
-docker-compose -f docker-compose.dev.yml up
-
-# Stop containers
-docker-compose -f docker-compose.dev.yml down
+# Stop application
+docker-compose down
 
 # View logs
-docker-compose -f docker-compose.dev.yml logs -f streamlit-app
+docker-compose logs -f streamlit-app
 
-# Rebuild containers
-docker-compose -f docker-compose.dev.yml down
-docker-compose -f docker-compose.dev.yml build --no-cache
-docker-compose -f docker-compose.dev.yml up
+# Open an interactive shell inside the app container
+docker-compose exec streamlit-app /bin/bash
 
-# Access container shell
-docker-compose -f docker-compose.dev.yml exec streamlit-app /bin/bash
+# Run the scraper from inside the app container
+docker-compose exec streamlit-app python -c "from scrapers.scraper_manager import ScraperManager; ScraperManager().run_all()"
 
-# Access PostgreSQL database
-docker-compose -f docker-compose.dev.yml exec postgres psql -U postgres -d radar_db
-
-# Run tests
-docker-compose -f docker-compose.dev.yml exec streamlit-app pytest tests/ -v
-
-# Install dependencies
-docker-compose -f docker-compose.dev.yml exec streamlit-app pip install -r requirements.txt
+# Install dependencies inside container
+docker-compose exec streamlit-app pip install -r requirements.txt
 ```
 
 ## 📁 Project Structure
 
 ```
 .
-├── app.py                 # Main Streamlit application
-├── pages/                 # Streamlit pages
+├── app.py                 # Streamlit entry point
+├── pages/                 # Streamlit application pages
 │   ├── 1_Home.py
 │   ├── 2_Konkurencja.py
 │   ├── 3_Regresja.py
 │   ├── 4_Kalkulator_ROI.py
 │   └── 5_Metodologia.py
-├── scrapers/              # Web scraping modules
+├── scrapers/              # Scraper manager and source scrapers
 │   ├── scraper_manager.py
 │   └── sources/
 │       ├── base.py
 │       ├── justjoinit.py
 │       ├── nofluffjobs.py
 │       └── theprotocolit.py
-├── utils/                 # Utility functions
+├── utils/                 # Utilities and database handler
 │   ├── db_handler.py
 │   └── logging_config.py
-├── config/                # Configuration
+├── config/                # Configuration settings
 ├── logs/                  # Application logs
-├── .vscode/               # VS Code configuration
-│   └── tasks.json         # Automated development tasks
-├── Dockerfile             # Production Docker image
-├── docker-compose.yml     # Production setup
-└── docker-compose.dev.yml # Development setup (hot reload)
+├── Dockerfile             # Docker image definition
+├── docker-compose.yml     # Container orchestration
+├── requirements.txt       # Python dependencies
+└── README.md              # Project documentation
 ```
 
 ## 🧪 Development Workflow
 
-1. **Edit any Python file** in VS Code
-2. **Save the file** - Streamlit auto-reloads
-3. **Refresh browser** to see changes
-4. **Check logs** if needed: Use "View Logs" task or `docker-compose -f docker-compose.dev.yml logs -f streamlit-app`
-
-**No Python installation needed locally!** Everything runs in Docker.
-
-## 🔄 Updating Dependencies
-
-1. Edit `requirements.txt`
-2. Use "Install Dependencies" task or rebuild containers
+1. Edit Python files in the repository.
+2. Save the file.
+3. Docker-mounted source should reload Streamlit automatically.
+4. If needed, check container logs.
 
 ## 📊 Database Management
 
-### Access PostgreSQL
-Use "Database Shell" task or:
-```powershell
-docker-compose -f docker-compose.dev.yml exec postgres psql -U postgres -d radar_db
+### Open PostgreSQL shell
+
+```bash
+docker-compose exec db psql -U ${POSTGRES_USER:-CHANGE_ME} -d ${POSTGRES_DB:-CHANGE_ME}
 ```
 
-### Backup Database
-```powershell
-docker-compose -f docker-compose.dev.yml exec db pg_dump -U navigator blue_ocean_db > backup.sql
+### Backup database
+
+```bash
+docker-compose exec db pg_dump -U ${POSTGRES_USER:-CHANGE_ME} ${POSTGRES_DB:-CHANGE_ME} > backup.sql
 ```
 
-### Restore Database
-```powershell
-Get-Content backup.sql | docker-compose -f docker-compose.dev.yml exec -T db psql -U navigator blue_ocean_db
+### Restore database
+
+```bash
+docker-compose exec db psql -U ${POSTGRES_USER:-CHANGE_ME} ${POSTGRES_DB:-CHANGE_ME} < backup.sql
 ```
 
 ## 🐛 Troubleshooting
 
-### Port Already in Use
-```powershell
-# Stop containers using VS Code task or:
-docker-compose -f docker-compose.dev.yml down
+### Port already in use
 
-# Or kill process on port 8501
-Get-Process -Id (Get-NetTCPConnection -LocalPort 8501).OwningProcess | Stop-Process
+```bash
+docker-compose down
 ```
 
-### Changes Not Reflecting
-1. Check logs using "View Logs" task
-2. Hard refresh browser: `Ctrl+Shift+R`
-3. Rebuild using "Rebuild Containers" task
+### Changes not reflecting
 
-### Database Connection Issues
-```powershell
-# Check container status
-docker-compose -f docker-compose.dev.yml ps
+1. Check logs:
+   ```bash
+   docker-compose logs -f streamlit-app
+   ```
+2. Restart containers:
+   ```bash
+   docker-compose down && docker-compose up --build
+   ```
 
-# Restart database
-docker-compose -f docker-compose.dev.yml restart db
+### Database connection issues
+
+```bash
+docker-compose ps
+docker-compose restart db
 ```
-
-## 🚢 Production Deployment
-
-See [`DEPLOYMENT.md`](DEPLOYMENT.md) for production deployment instructions.
 
 ## 📝 License
 
-See [`LICENSE`](LICENSE) file for details.
+See [`LICENSE`](LICENSE) for license details.
 
 ## 🔗 Technologies
 
-- **Streamlit** - Web application framework
-- **Playwright** - Web scraping with browser automation
-- **PostgreSQL** - Database
-- **Docker** - Containerization
-- **BeautifulSoup4** - HTML parsing
-- **Pandas** - Data analysis
-- **Plotly** - Interactive visualizations
+- Streamlit
+- PostgreSQL
+- Docker
+- BeautifulSoup4
+- Pandas
+- Plotly
+- SQLAlchemy
