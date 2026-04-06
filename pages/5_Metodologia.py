@@ -40,7 +40,7 @@ def confirm_clear_database():
     st.markdown("Tej operacji nie można cofnąć.")
     
     col1, col2 = st.columns(2)
-    if col1.button("Tak, usuń wszystko", type="primary", use_container_width=True):
+    if col1.button("Tak, usuń wszystko", type="primary", width="stretch"):
         try:
             deleted_count = db_handler.clear_database()
             st.session_state.action_msg = f"✅ Pomyślnie usunięto {deleted_count} rekordów!"
@@ -48,7 +48,7 @@ def confirm_clear_database():
         except Exception as e:
             st.error(f"Błąd podczas czyszczenia bazy: {e}")
             
-    if col2.button("Anuluj", use_container_width=True):
+    if col2.button("Anuluj", width="stretch"):
         st.rerun()
 
 # --- Wyświetlanie globalnych komunikatów sukcesu ---
@@ -160,7 +160,7 @@ with tab_view:
                 
         # Wyświetlanie
         st.caption(f"Pokazano {len(filtered_df):,} z {record_count:,} całkowitych ofert w bazie.")
-        st.dataframe(filtered_df, use_container_width=True, height=500, hide_index=True)
+        st.dataframe(filtered_df, width="stretch", height=500, hide_index=True)
 
 # ==========================================
 # ZAKŁADKA 4: Czyszczenie Bazy

@@ -107,7 +107,7 @@ fig1 = px.scatter(
     title="Wizualizacja trendu: Podaż ofert a zarobki"
 )
 fig1.update_traces(marker=dict(size=10, opacity=0.7))
-st.plotly_chart(fig1, use_container_width=True)
+st.plotly_chart(fig1, width="stretch")
 
 # Interpretacja
 if spearman_off_p < 0.05:
@@ -151,7 +151,7 @@ fig2 = px.scatter(
     title="Wizualizacja trendu: Czas wakatu a zarobki"
 )
 fig2.update_traces(marker=dict(size=10, opacity=0.7))
-st.plotly_chart(fig2, use_container_width=True)
+st.plotly_chart(fig2, width="stretch")
 
 # Interpretacja
 if spearman_time_p < 0.05:

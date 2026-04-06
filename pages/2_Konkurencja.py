@@ -93,20 +93,17 @@ else:
         title="Opłacalność vs. Deficyt Kandydatów"
     )
     fig.update_layout(xaxis={'categoryorder':'total descending'})
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     with st.expander("Tabela: Pełne zestawienie analityczne"):
         formatted_df = df_niches.copy()
         formatted_df['Mediana_Zarobkow'] = formatted_df['Mediana_Zarobkow'].apply(lambda x: f"{x:,.2f} PLN".replace(',', ' ') if pd.notnull(x) else "Brak")
         formatted_df['Sredni_Czas_Zatrudnienia'] = formatted_df['Sredni_Czas_Zatrudnienia'].apply(lambda x: f"{x:.0f} dni" if pd.notnull(x) else "Brak")
         formatted_df.columns = ['Technologia', 'Liczba Ofert', 'Mediana Zarobków', 'Czas na Rynku', 'Z widełkami (%)']
-        st.dataframe(formatted_df, use_container_width=True, hide_index=True)
+        st.dataframe(formatted_df, width="stretch", hide_index=True)
 
 st.markdown("---")
 st.header("📊 Ogólny przegląd rynku IT")
-
-# Set Seaborn theme for consistent styling
-sns.set_theme(style="whitegrid")
 
 st.subheader("Popularność technologii w ofertach pracy")
 
@@ -115,50 +112,92 @@ tab_top, tab_bottom = st.tabs(["🔥 Główne Technologie (Czerwony Ocean)", "�
 
 with tab_top:
     st.caption("Najczęściej wymagane umiejętności. Duża konkurencja, ale najwięcej ofert.")
-    fig_tech_top, ax_tech_top = plt.subplots(figsize=(10, 6))
-    top_20_techs = df_exploded["Technologia_Pojedyncza"].value_counts().head(20)
-    sns.countplot(data=df_exploded[df_exploded["Technologia_Pojedyncza"].isin(top_20_techs.index)], y="Technologia_Pojedyncza", order=top_20_techs.index, palette='viridis', ax=ax_tech_top)
-    ax_tech_top.set_title("Top 20 Najpopularniejszych Technologii", pad=10)
-    ax_tech_top.set_xlabel("Liczba Ofert")
-    ax_tech_top.set_ylabel("")
-    st.pyplot(fig_tech_top)
+    
+    # Przygotowanie danych do Plotly
+    top_20_techs = df_exploded["Technologia_Pojedyncza"].value_counts().head(20).reset_index()
+    top_20_techs.columns = ["Technologia", "Liczba Ofert"]
+    
+    # Tworzenie interaktywnego wykresu Plotly
+    fig_tech_top = px.bar(
+        top_20_techs, 
+        x="Liczba Ofert", 
+        y="Technologia", 
+        orientation='h',
+        color="Liczba Ofert", 
+        color_continuous_scale="viridis",
+        title="Top 20 Najpopularniejszych Technologii"
+    )
+    # Sortowanie, aby najpopularniejsza technologia była na samej górze
+    fig_tech_top.update_layout(yaxis={'categoryorder':'total ascending'}, coloraxis_showscale=False)
+    
+    # Użycie parametru use_container_width dostosowuje wykres do szerokości kolumny Streamlit
+    st.plotly_chart(fig_tech_top, use_container_width=True)
 
 with tab_bottom:
     st.caption(f"Technologie odfiltrowane według Twoich suwaków: od {min_jobs} do {max_jobs} ofert.")
-    fig_tech_bottom, ax_tech_bottom = plt.subplots(figsize=(10, 6))
+    
     all_counts = df_exploded["Technologia_Pojedyncza"].value_counts()
     niche_counts = all_counts[(all_counts >= min_jobs) & (all_counts <= max_jobs)]
-    bottom_20_techs = niche_counts.tail(20)
+    bottom_20_techs = niche_counts.tail(20).reset_index()
+    bottom_20_techs.columns = ["Technologia", "Liczba Ofert"]
     
     if bottom_20_techs.empty:
         st.warning("Zbyt wąski przedział suwaków.")
     else:
-        sns.countplot(data=df_exploded[df_exploded["Technologia_Pojedyncza"].isin(bottom_20_techs.index)], y="Technologia_Pojedyncza", order=bottom_20_techs.index, palette='magma', ax=ax_tech_bottom)
-        ax_tech_bottom.set_title(f"Top 20 Najrzadszych Technologii ({min_jobs}-{max_jobs} ofert)", pad=10)
-        ax_tech_bottom.set_xlabel("Liczba Ofert")
-        ax_tech_bottom.set_ylabel("")
-        st.pyplot(fig_tech_bottom)
+        fig_tech_bottom = px.bar(
+            bottom_20_techs, 
+            x="Liczba Ofert", 
+            y="Technologia", 
+            orientation='h',
+            color="Liczba Ofert", 
+            color_continuous_scale="magma",
+            title=f"Top 20 Najrzadszych Technologii ({min_jobs}-{max_jobs} ofert)"
+        )
+        fig_tech_bottom.update_layout(yaxis={'categoryorder':'total ascending'}, coloraxis_showscale=False)
+        st.plotly_chart(fig_tech_bottom, use_container_width=True)
 
 # Wynagrodzenia (Zakładki)
 st.markdown("<br>", unsafe_allow_html=True)
 tab_hist, tab_box = st.tabs(["📈 Rozkład Wynagrodzeń", "📦 Zakresy Wynagrodzeń"])
 
+# Przygotowanie danych (Melt) - Plotly znacznie lepiej radzi sobie z nałożonymi wykresami
+# jeśli dane są "spłaszczone" do formatu długiego (long format)
+df_wages = df_raw[['Wynagrodzenie Od', 'Wynagrodzenie Do']].melt(
+    var_name='Typ', 
+    value_name='Kwota'
+)
+
 with tab_hist:
     st.caption("Dystrybucja dolnych (niebieski) i górnych (czerwony) widełek płacowych.")
-    fig_hist, ax_hist = plt.subplots(figsize=(10, 5))
-    sns.histplot(data=df_raw, x='Wynagrodzenie Od', bins=50, kde=True, color='#4e79a7', label='Zarobki Od', element="step", ax=ax_hist)
-    sns.histplot(data=df_raw, x='Wynagrodzenie Do', bins=50, kde=True, color='#e15759', alpha=0.5, label='Zarobki Do', element="step", ax=ax_hist)
-    ax_hist.set_title("Rozkład widełek płacowych (PLN)")
-    ax_hist.set_xlabel("Kwota (PLN)")
-    ax_hist.set_ylabel("Liczba ofert")
-    ax_hist.legend()
-    st.pyplot(fig_hist)
+    
+    fig_hist = px.histogram(
+        df_wages, 
+        x="Kwota", 
+        color="Typ",
+        barmode="overlay", # Nakładanie na siebie
+        nbins=50,
+        color_discrete_map={'Wynagrodzenie Od': '#4e79a7', 'Wynagrodzenie Do': '#e15759'},
+        title="Rozkład widełek płacowych (PLN)",
+        labels={"Kwota": "Kwota (PLN)"}
+    )
+    # Zwiększenie przezroczystości, aby było widać nakładające się dane
+    fig_hist.update_traces(opacity=0.75)
+    fig_hist.update_layout(legend_title_text='') # Ukrywamy brzydki tytuł legendy
+    
+    st.plotly_chart(fig_hist, use_container_width=True)
 
 with tab_box:
     st.caption("Kwartyle i wartości odstające w ofertach pracy.")
-    fig_box, ax_box = plt.subplots(figsize=(10, 5))
-    sns.boxplot(data=df_raw[["Wynagrodzenie Od", "Wynagrodzenie Do"]], palette=["#4e79a7", "#e15759"], width=0.5, ax=ax_box)
-    ax_box.set_xticks([0, 1])
-    ax_box.set_xticklabels(["Zarobki Od", "Zarobki Do"])
-    ax_box.set_title("Zakresy wynagrodzeń miesięcznych (PLN)")
-    st.pyplot(fig_box)
+    
+    fig_box = px.box(
+        df_wages, 
+        x="Typ", 
+        y="Kwota", 
+        color="Typ",
+        color_discrete_map={'Wynagrodzenie Od': '#4e79a7', 'Wynagrodzenie Do': '#e15759'},
+        title="Zakresy wynagrodzeń miesięcznych (PLN)",
+        labels={"Kwota": "Kwota (PLN)", "Typ": ""}
+    )
+    fig_box.update_layout(showlegend=False) # Ukrywamy legendę, bo oś X już to opisuje
+    
+    st.plotly_chart(fig_box, use_container_width=True)
