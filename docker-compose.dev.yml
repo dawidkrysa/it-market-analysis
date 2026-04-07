@@ -1,0 +1,43 @@
+services:
+  streamlit-app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${STREAMLIT_PORT:-8501}:8501"
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    security_opt: []
+    read_only: false
+    tmpfs:
+      - /tmp:exec,mode=777
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-CHANGE_ME}:${POSTGRES_PASSWORD:-CHANGE_ME}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB:-CHANGE_ME}
+      - XDG_CACHE_HOME=/home/appuser/.cache
+      - XDG_CONFIG_HOME=/home/appuser/.config
+      - DEBUG_MODE=true
+
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-CHANGE_ME}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+      POSTGRES_DB: ${POSTGRES_DB:-CHANGE_ME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-CHANGE_ME} -d ${POSTGRES_DB:-CHANGE_ME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
