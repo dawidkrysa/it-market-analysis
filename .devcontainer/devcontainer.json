@@ -1,53 +1,55 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/docker-existing-docker-compose
 {
-	"name": "Existing Docker Compose (Extend)",
+    "name": "Radar Mikro Nisz - Dev Container",
 
-	// Update the 'dockerComposeFile' list if you have more compose files or use different names.
-	// The .devcontainer/docker-compose.yml file contains any overrides you need/want to make.
-	"dockerComposeFile": [
-		"../docker-compose.yml",
-	],
+    // Ścieżka do Twojego głównego pliku compose (zakładając, że ten plik jest w .devcontainer/)
+    "dockerComposeFile": [
+        "../docker-compose.yml",
+        "../docker-compose.dev.yml"
+    ],
 
-	// The 'service' property is the name of the service for the container that VS Code should
-	// use. Update this value and .devcontainer/docker-compose.yml to the real service name.
-	"service": "streamlit-app",
+    // Nazwa usługi, w której chcesz pracować
+    "service": "streamlit-app",
 
-	// The optional 'workspaceFolder' property is the path VS Code should open by default when
-	// connected. This is typically a file mount in .devcontainer/docker-compose.yml
-	"workspaceFolder": "/app",
+    // Folder roboczy wewnątrz kontenera (zgodnie z Twoim docker-compose.yml)
+    "workspaceFolder": "/app",
 
-	// Features to add to the dev container. More info: https://containers.dev/features.
-	"features": {
+    // Instalacja dodatkowych narzędzi bezpośrednio w kontenerze
+    "features": {
         "ghcr.io/devcontainers/features/git:1": {},
         "ghcr.io/devcontainers/features/github-cli:1": {}
     },
 
-	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// "forwardPorts": [],
-
-	// Uncomment the next line if you want start specific services in your Docker Compose config.
-	// "runServices": [],
-
-	// Uncomment the next line if you want to keep your containers running after VS Code shuts down.
-	// "shutdownAction": "none",
-
-	// Uncomment the next line to run commands after the container is created.
-	// "postCreateCommand": "cat /etc/os-release",
-
-	// Configure tool-specific properties.
-	"customizations": {
+    // Ustawienia specyficzne dla IDE
+    "customizations": {
+        // Konfiguracja dla PyCharm Professional
+        "jetbrains": {
+            "plugins": [
+                "com.jetbrains.python",    // Wsparcie dla Pythona
+                "com.intellij.database",  // Narzędzia do bazy danych (Postgres)
+                "jupyter"                 // Obsługa notebooków bez portu 8888
+            ],
+            "settings": {
+                "python.interpreterPath": "python" 
+            }
+        },
+        // Zachowanie kompatybilności z VS Code
         "vscode": {
-            // Automatyczna instalacja przydatnych wtyczek wewnątrz kontenera:
             "extensions": [
-                "ms-python.python",        
-                "ms-python.vscode-pylance", 
-                "mtxr.sqltools",            
-                "mtxr.sqltools-driver-pg"    
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-toolsai.jupyter",
+                "mtxr.sqltools",
+                "mtxr.sqltools-driver-pg"
             ]
         }
-    }
+    },
 
-	// Uncomment to connect as an existing user other than the container default. More info: https://aka.ms/dev-containers-non-root.
-	// "remoteUser": "devcontainer"
+    // Ważne: PyCharm sam obsłuży tunelowanie, nie potrzebujesz forwardPorts dla Jupytera
+    "forwardPorts": [8501], // Tylko Streamlit, byś mógł go widzieć w przeglądarce
+
+    // Opcjonalnie: komenda uruchamiana po zbudowaniu kontenera
+    // "postCreateCommand": "pip install -r requirements.txt",
+
+    // Akcja po zamknięciu IDE (lepiej 'none', żeby baza danych db-1 nie padała)
+    "shutdownAction": "none"
 }

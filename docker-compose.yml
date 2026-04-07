@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   streamlit-app:
     build: 
@@ -13,8 +11,6 @@ services:
     security_opt:
       - no-new-privileges:true
     read_only: false
-    tmpfs:
-      - /tmp
     restart: unless-stopped
     depends_on:
       db:
