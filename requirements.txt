@@ -3,6 +3,7 @@ pandas
 numpy
 scipy
 statsmodels
+openpyxl
 
 # Web Scraping & Networking
 requests
@@ -17,8 +18,9 @@ psycopg2-binary
 streamlit
 plotly
 ipywidgets
-matplotlib
-seaborn
+
+# Environment & Config
+python-dotenv
 
 # Jupyter Core
 jupyter
