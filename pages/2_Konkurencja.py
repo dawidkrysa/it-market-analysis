@@ -2,8 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from utils.db_handler import DatabaseHandler
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 # Header and description
 st.title("Strategia Błękitnego Oceanu 🌊")
@@ -33,13 +31,14 @@ except Exception as e:
     st.stop()
 
 # --- Download and analyze data with a spinner to indicate processing ---
-with st.spinner("Przetwarzanie tysięcy ofert pracy... ⏳"):
+with st.spinner("Przetwarzanie tysięcy ofert pracy... "):
     try:
-        df_niches = db.get_blue_ocean_niches(min_jobs=min_jobs, max_jobs=max_jobs)
-        raw_jobs = db.get_all_jobs()
-        df_raw = pd.DataFrame(raw_jobs)
-        df_raw = db._prepare_salary_data(df_raw)
-        df_exploded = db._explode_technologies(df_raw.copy())
+        df_raw, df_exploded, niche_analysis = DatabaseHandler.get_cached_market_data()
+
+        if not niche_analysis.empty:
+            df_niches = db._filter_viable_niches(niche_analysis, min_jobs, max_jobs)
+        else:
+            df_niches = pd.DataFrame()
     except Exception as e:
         st.error(f"❌ Błąd: {e}")
         st.stop()
@@ -131,7 +130,7 @@ with tab_top:
     fig_tech_top.update_layout(yaxis={'categoryorder':'total ascending'}, coloraxis_showscale=False)
     
     # Użycie parametru use_container_width dostosowuje wykres do szerokości kolumny Streamlit
-    st.plotly_chart(fig_tech_top, use_container_width=True)
+    st.plotly_chart(fig_tech_top, width="stretch")
 
 with tab_bottom:
     st.caption(f"Technologie odfiltrowane według Twoich suwaków: od {min_jobs} do {max_jobs} ofert.")
@@ -154,7 +153,7 @@ with tab_bottom:
             title=f"Top 20 Najrzadszych Technologii ({min_jobs}-{max_jobs} ofert)"
         )
         fig_tech_bottom.update_layout(yaxis={'categoryorder':'total ascending'}, coloraxis_showscale=False)
-        st.plotly_chart(fig_tech_bottom, use_container_width=True)
+        st.plotly_chart(fig_tech_bottom, width="stretch")
 
 # Wynagrodzenia (Zakładki)
 st.markdown("<br>", unsafe_allow_html=True)
@@ -184,7 +183,7 @@ with tab_hist:
     fig_hist.update_traces(opacity=0.75)
     fig_hist.update_layout(legend_title_text='') # Ukrywamy brzydki tytuł legendy
     
-    st.plotly_chart(fig_hist, use_container_width=True)
+    st.plotly_chart(fig_hist, width="stretch")
 
 with tab_box:
     st.caption("Kwartyle i wartości odstające w ofertach pracy.")
@@ -200,4 +199,4 @@ with tab_box:
     )
     fig_box.update_layout(showlegend=False) # Ukrywamy legendę, bo oś X już to opisuje
     
-    st.plotly_chart(fig_box, use_container_width=True)
+    st.plotly_chart(fig_box, width="stretch")
