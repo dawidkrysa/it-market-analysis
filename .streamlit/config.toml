@@ -1,5 +1,3 @@
 [client]
 showErrorDetails = false
 toolbarMode = "viewer"
-fileWatcherType = "poll"
-runOnSave = true
