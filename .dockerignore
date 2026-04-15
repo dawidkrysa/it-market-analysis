@@ -1,17 +1,17 @@
 # Python auto-generated files
-__pycache__
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
 
 # Environment files
 .env
-venv
-.venv
-env
+venv/
+.venv/
+env/
 
 # Git files
-.git
+.git/
 .gitignore
 
 # Streamlit
@@ -24,3 +24,21 @@ logs/
 # Documentation
 README.md
 .DS_Store
+
+# IDEs and Editors (PyCharm, VS Code, OS files)
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker files (no need to copy them inside the container)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Jupyter Notebooks and Checkpoints
+notebooks/
+.ipynb_checkpoints/
+
+# Test data / examples (Optional)
+examples/
