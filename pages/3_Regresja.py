@@ -46,9 +46,13 @@ min_salary = st.sidebar.slider("Minimalna mediana (PLN)", 0, 20000, 1000, 500, h
 max_salary = st.sidebar.slider("Maksymalna mediana (PLN)", 10000, 50000, 20000, 1000, help="Odrzuca pojedyncze oferty dyrektorskie z kosmicznymi stawkami, które fałszują trend ogólny.")
 
 # --- Pobieranie i Filtrowanie Danych ---
-with st.spinner("Pobieranie i filtrowanie danych z bazy..."):
+with st.spinner("Szybkie filtrowanie danych..."):
     try:
-        df_niches = db.get_blue_ocean_niches(min_jobs=min_jobs, max_jobs=max_jobs)
+        df_raw, df_exploded, niche_analysis = DatabaseHandler.get_cached_market_data()
+        if not niche_analysis.empty:
+            df_niches = db._filter_viable_niches(niche_analysis, min_jobs, max_jobs)
+        else:
+            df_niches = pd.DataFrame()
     except Exception as e:
         st.error(f"❌ Błąd: {e}")
         st.stop()

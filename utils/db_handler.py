@@ -7,6 +7,7 @@ from datetime import datetime,timezone
 from typing import Any
 import pandas as pd
 import re
+import streamlit as st
 
 from sqlalchemy.orm.session import Session
 from config.settings import Settings
@@ -245,6 +246,25 @@ class DatabaseHandler:
             ]
         finally:
             session.close()
+
+    @staticmethod
+    @st.cache_data(ttl=3600)  # ttl=3600 odświeży cache co godzinę, jeśli aplikacja działa w tle
+    def get_cached_market_data():
+
+        db = DatabaseHandler()
+        raw_jobs = db.get_all_jobs()
+        if not raw_jobs:
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+        df_raw = pd.DataFrame(raw_jobs)
+        df_raw = db._deduplicate_jobs(df_raw)
+        df_raw = db._prepare_salary_data(df_raw)
+        df_raw = db._calculate_market_time(df_raw)
+        df_exploded = db._explode_technologies(df_raw.copy())
+        niche_analysis = db._aggregate_niche_metrics(df_exploded)
+
+        return df_raw, df_exploded, niche_analysis
+
     def _deduplicate_jobs(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Remove duplicate job postings based on normalized company name and key attributes.
