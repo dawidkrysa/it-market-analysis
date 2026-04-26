@@ -19,6 +19,8 @@ class Settings:
         'postgresql://navigator:DeepDive_2026_Secure@db:5432/blue_ocean_db'
     )
 
+    ADMIN_KEY: str = os.getenv('ADMIN_KEY','defau!tYolo511')
+
     
     @classmethod
     def validate(cls) -> None:
