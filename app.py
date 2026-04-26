@@ -7,6 +7,7 @@ Manages navigation, page routing, and provides a global sidebar config.
 
 import streamlit as st
 from utils.logging_config import setup_logging
+from config.settings import Settings
 
 # 1. GLOBALNA KONFIGURACJA (Usuń st.set_page_config z innych plików!)
 st.set_page_config(
@@ -16,10 +17,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+ADMIN_KEY = Settings().ADMIN_KEY
+
 # Inicjalizacja logowania
 logger = setup_logging()
 
-# 2. DEFINICJA STRON Z IKONAMI MATERIAL DESIGN
+# DEFINICJA STRON Z IKONAMI MATERIAL DESIGN
 # Używamy ujednoliconych ikon, które wyglądają profesjonalnie na każdym urządzeniu
 strona_glowna = st.Page("pages/1_Home.py", title="Strona Główna", icon=":material/home:")
 strona_konkurencji = st.Page("pages/2_Konkurencja.py", title="Radar Błękitnych Oceanów", icon=":material/troubleshoot:")
@@ -27,8 +30,8 @@ strona_regresji = st.Page("pages/3_Regresja.py", title="Weryfikacja Statystyczna
 strona_roi = st.Page("pages/4_Kalkulator_ROI.py", title="Kalkulator ROI", icon=":material/calculate:")
 strona_metodologii = st.Page("pages/5_Metodologia.py", title="Silnik Danych", icon=":material/database:")
 
-# 3. GRUPOWANIE NAWIGACJI (Bardziej biznesowe nazewnictwo)
-pg = st.navigation(
+# GRUPOWANIE NAWIGACJI (Bardziej biznesowe nazewnictwo)
+nav_structure = st.navigation(
     {
         "Wprowadzenie": [strona_glowna],
         "Analiza Rynku": [strona_konkurencji, strona_regresji],
@@ -37,13 +40,22 @@ pg = st.navigation(
     }
 )
 
-# 4. GLOBALNY PASEK BOCZNY
+# GLOBALNY PASEK BOCZNY
 with st.sidebar:
     st.caption("🧭 **Radar Mikro-Nisz IT v1.0**")
     st.markdown("---")
+
+    with st.expander("🔐 Panel Dostępu"):
+        access_code = st.text_input("Kod dostępu", type="password")
+
+    if access_code == ADMIN_KEY:
+        nav_structure["Administracja"] = [strona_metodologii]
+        st.success("Tryb Admina: Aktywny")
+
     st.info("💡 Wybierz moduł z menu powyżej, aby rozpocząć analizę danych z rynku.")
     
     # Miejsce na ewentualne globalne filtry w przyszłości (np. "Wybierz Miasto")
 
 # Uruchomienie aplikacji
+pg = st.navigation(nav_structure)
 pg.run()
