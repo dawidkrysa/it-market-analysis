@@ -425,6 +425,28 @@ class DatabaseHandler:
         query = "SELECT * FROM job_postings"
         # Load data directly using the database engine
         df = pd.read_sql(query, con=self.engine)
+
+        rename_mapping = {
+            'id': 'ID',
+            'stanowisko': 'Stanowisko',
+            'firma': 'Firma',
+            'poziom': 'Poziom',
+            'kategoria': 'Kategoria',
+            'technologie': 'Technologie',
+            'lokalizacja': 'Lokalizacja',
+            'wynagrodzenie_od': 'Wynagrodzenie Od',
+            'wynagrodzenie_do': 'Wynagrodzenie Do',
+            'waluta': 'Waluta',
+            'utworzono': 'Utworzono',
+            'zaktualizowano': 'Zaktualizowano',
+            'scraped_at': 'Scraped At',
+            'data_pobrania': 'Data Pobrania',
+            'source': 'Source'
+        }
+
+        # Rename database columns
+        df = df.rename(columns=rename_mapping)
+
         return df
 
     @staticmethod
