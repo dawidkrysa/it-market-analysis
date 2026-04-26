@@ -13,6 +13,7 @@ lxml
 # Database & Storage
 sqlalchemy
 psycopg2-binary
+python-dotenv
 
 # Visualization & UI
 streamlit
