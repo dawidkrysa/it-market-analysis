@@ -1,10 +1,18 @@
+"""
+Radar Mikro-nisz - Statistical Correlation Analysis Module.
+
+This module verifies the "Blue Ocean" strategy hypotheses using statistical
+methods (Spearman and Kendall correlation tests) to analyze the relationship
+between technology niche size, vacancy duration, and salary levels.
+"""
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from scipy import stats
 from utils.db_handler import DatabaseHandler
 
-# --- Konfiguracja i Nagłówek ---
+# --- Configuration and Header ---
 st.title("📊 Analiza Korelacji: Niszowość vs Wynagrodzenia")
 
 st.markdown("""
@@ -25,9 +33,15 @@ with st.expander("❓ Słowniczek pojęć statystycznych (Rozwiń, jeśli potrze
     * **Test Spearmana / Kendalla:** Dwa różne wzory matematyczne do liczenia korelacji. Używamy ich, ponieważ zarobki w IT nie rosną idealnie "od linijki", a te testy świetnie radzą sobie z takimi danymi.
     """)
 
-# --- Inicjalizacja Bazy Danych ---
+# --- Database Initialization ---
 @st.cache_resource
-def get_db_handler():
+def get_db_handler() -> DatabaseHandler:
+    """
+    Initialize and cache the database handler.
+
+    Returns:
+        DatabaseHandler: The cached database connection instance.
+    """
     return DatabaseHandler()
 
 try:
@@ -36,7 +50,7 @@ except Exception as e:
     st.error(f"❌ Błąd połączenia z bazą danych: {e}")
     st.stop()
 
-# --- Panel Boczny (Sidebar) ---
+# --- Sidebar Panel ---
 st.sidebar.markdown("### Wielkość rynku")
 min_jobs = st.sidebar.slider("Min. liczba ofert (wiarygodność)", 1, 50, 10, 1, help="Odrzuca technologie, które pojawiły się np. tylko raz (literówki, błędy).")
 max_jobs = st.sidebar.slider("Max. liczba ofert (nasycenie)", 30, 300, 150, 10, help="Górny limit niszy. Powyżej tej wartości zaczyna się 'Czerwony Ocean' (duża konkurencja).")
@@ -45,7 +59,7 @@ st.sidebar.markdown("### Filtry anomalii płacowych")
 min_salary = st.sidebar.slider("Minimalna mediana (PLN)", 0, 20000, 1000, 500, help="Odrzuca darmowe staże i błędy danych wejściowych.")
 max_salary = st.sidebar.slider("Maksymalna mediana (PLN)", 10000, 50000, 20000, 1000, help="Odrzuca pojedyncze oferty dyrektorskie z kosmicznymi stawkami, które fałszują trend ogólny.")
 
-# --- Pobieranie i Filtrowanie Danych ---
+# --- Data Retrieval and Filtering ---
 with st.spinner("Szybkie filtrowanie danych..."):
     try:
         df_raw, df_exploded, niche_analysis = DatabaseHandler.get_cached_market_data()
@@ -57,6 +71,7 @@ with st.spinner("Szybkie filtrowanie danych..."):
         st.error(f"❌ Błąd: {e}")
         st.stop()
 
+# Validate the retrieved dataset size before proceeding
 if df_niches is None or len(df_niches) < 3:
     st.warning("⚠️ Zbyt mało danych do analizy (minimum to 3 technologie). Dostosuj suwaki w panelu bocznym.")
     st.stop()
@@ -67,42 +82,57 @@ correlation_data = correlation_data[
     (correlation_data['Mediana_Zarobkow'] <= max_salary)
 ]
 
+# Ensure we still have enough data points after applying salary filters
 if len(correlation_data) < 3:
     st.warning(f"⚠️ Po zastosowaniu filtrów płacowych pozostało tylko {len(correlation_data)} technologii. Rozszerz zakres.")
     st.stop()
 
-# --- Funkcja Pomocnicza dla Etykiet ---
-def get_significance_label(p_value):
-    if p_value < 0.001: return "🟢 Bardzo silnie istotna (p < 0.001)"
-    if p_value < 0.01:  return "🟢 Silnie istotna (p < 0.01)"
-    if p_value < 0.05:  return "🟡 Istotna statystycznie (p < 0.05)"
+# --- Helper Function for Labels ---
+def get_significance_label(p_value: float) -> str:
+    """
+    Determine the statistical significance label based on the calculated p-value.
+
+    Args:
+        p_value (float): The p-value resulting from a statistical test.
+
+    Returns:
+        str: A formatted string containing an indicator emoji and explanation.
+    """
+    if p_value < 0.001:
+        return "🟢 Bardzo silnie istotna (p < 0.001)"
+    if p_value < 0.01:
+        return "🟢 Silnie istotna (p < 0.01)"
+    if p_value < 0.05:
+        return "🟡 Istotna statystycznie (p < 0.05)"
     return "🔴 Nieistotna (przypadek)"
 
 # ==========================================
-# ANALIZA 1: Liczba Ofert vs Wynagrodzenie
+# ANALYSIS 1: Number of Offers vs. Salary
 # ==========================================
 st.markdown("---")
 st.header("1️⃣ Liczba Ofert vs Wynagrodzenie")
 
+# Calculate correlations
 spearman_off, spearman_off_p = stats.spearmanr(correlation_data['Liczba_Ofert'], correlation_data['Mediana_Zarobkow'])
 kendall_off, kendall_off_p = stats.kendalltau(correlation_data['Liczba_Ofert'], correlation_data['Mediana_Zarobkow'])
 
 col1, col2 = st.columns(2)
 with col1:
     st.metric(
-        "Korelacja Spearmana (ρ)", 
-        f"{spearman_off:.3f}", 
+        "Korelacja Spearmana (ρ)",
+        f"{spearman_off:.3f}",
         get_significance_label(spearman_off_p),
         help="Główny wskaźnik siły związku między liczbą ofert a płacą."
     )
 with col2:
     st.metric(
-        "Korelacja Kendalla (τ)", 
-        f"{kendall_off:.3f}", 
+        "Korelacja Kendalla (τ)",
+        f"{kendall_off:.3f}",
         get_significance_label(kendall_off_p),
         help="Test pomocniczy, często dokładniejszy dla małych próbek danych."
     )
 
+# Render scatter plot with trendline
 fig1 = px.scatter(
     correlation_data, x='Liczba_Ofert', y='Mediana_Zarobkow',
     hover_data={'Technologia_Pojedyncza': True, 'Sredni_Czas_Zatrudnienia': ':.1f', 'Mediana_Zarobkow': ':.0f'},
@@ -113,7 +143,7 @@ fig1 = px.scatter(
 fig1.update_traces(marker=dict(size=10, opacity=0.7))
 st.plotly_chart(fig1, width="stretch")
 
-# Interpretacja
+# Statistical interpretation display
 if spearman_off_p < 0.05:
     if spearman_off < 0:
         st.success("**Wniosek (Potwierdzenie hipotezy):** Statystyka wykazuje ujemną korelację. Mniej popularne technologie (nisze) faktycznie oferują wyższe wynagrodzenia w badanej próbie.")
@@ -123,29 +153,31 @@ else:
     st.info("**Wniosek (Brak dowodów):** Obecne dane nie wykazują statystycznego związku między tym, jak rzadka jest technologia, a tym, ile się w niej zarabia (wynik może być dziełem przypadku).")
 
 # ==========================================
-# ANALIZA 2: Czas na Rynku vs Wynagrodzenie
+# ANALYSIS 2: Time on Market vs. Salary
 # ==========================================
 st.markdown("---")
 st.header("2️⃣ Czas na Rynku vs Wynagrodzenie")
 
+# Calculate correlations
 spearman_time, spearman_time_p = stats.spearmanr(correlation_data['Sredni_Czas_Zatrudnienia'], correlation_data['Mediana_Zarobkow'])
 kendall_time, kendall_time_p = stats.kendalltau(correlation_data['Sredni_Czas_Zatrudnienia'], correlation_data['Mediana_Zarobkow'])
 
 col3, col4 = st.columns(2)
 with col3:
     st.metric(
-        "Korelacja Spearmana (ρ)", 
-        f"{spearman_time:.3f}", 
+        "Korelacja Spearmana (ρ)",
+        f"{spearman_time:.3f}",
         get_significance_label(spearman_time_p),
         help="Sprawdza, czy im dłużej wisi oferta, tym wyższa jest mediana płac."
     )
 with col4:
     st.metric(
-        "Korelacja Kendalla (τ)", 
-        f"{kendall_time:.3f}", 
+        "Korelacja Kendalla (τ)",
+        f"{kendall_time:.3f}",
         get_significance_label(kendall_time_p)
     )
 
+# Render scatter plot with trendline
 fig2 = px.scatter(
     correlation_data, x='Sredni_Czas_Zatrudnienia', y='Mediana_Zarobkow',
     hover_data={'Technologia_Pojedyncza': True, 'Liczba_Ofert': True, 'Mediana_Zarobkow': ':.0f'},
@@ -157,7 +189,7 @@ fig2 = px.scatter(
 fig2.update_traces(marker=dict(size=10, opacity=0.7))
 st.plotly_chart(fig2, width="stretch")
 
-# Interpretacja
+# Statistical interpretation display
 if spearman_time_p < 0.05:
     if spearman_time > 0:
         st.success("**Wniosek (Potwierdzenie hipotezy):** Statystyka wykazuje dodatnią korelację. Oferty, które najtrudniej obsadzić (wiszą najdłużej), faktycznie próbują kusić wyższymi stawkami.")

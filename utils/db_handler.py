@@ -1,10 +1,15 @@
-"""Database handler for job postings using SQLAlchemy ORM."""
+"""
+Database handler for job postings using SQLAlchemy ORM.
+
+This module provides the necessary models and database operations
+to save, retrieve, clean, and analyze job market data.
+"""
 
 from sqlalchemy import Engine, create_engine, Column, String, Integer, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime,timezone
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Tuple, List
 import pandas as pd
 import re
 import streamlit as st
@@ -18,17 +23,20 @@ from sqlalchemy import Enum as SQLEnum
 Base = declarative_base()
 
 class SeniorityLevel(enum.Enum):
+    """Enumeration for job seniority levels."""
     TRAINEE = "TRAINEE"
     JUNIOR = "JUNIOR"
     MID = "MID"
     SENIOR = "SENIOR"
 
 class Currency(enum.Enum):
+    """Enumeration for supported currencies."""
     PLN = "PLN"
     EUR = "EUR"
     USD = "USD"
 
 class Source(enum.Enum):
+    """Enumeration for data scraping sources."""
     JUSTJOINIT = "JUSTJOINIT"
     NOFLUFFJOBS = "NOFLUFFJOBS"
     THEPROTOCOLIT = "THEPROTOCOLIT"
@@ -36,27 +44,28 @@ class Source(enum.Enum):
 
 class JobPosting(Base):
     """
-    SQLAlchemy model for job postings.
-    
+    SQLAlchemy model representing a single job posting.
+
     Attributes:
-        id: Unique job identifier
-        group_id: Group identifier for related jobs
-        stanowisko: Job title/position
-        firma: Company name
-        poziom: Seniority level (Trainee, Junior, Mid, Senior)
-        kategoria: Job category
-        technologie: Required technologies (comma-separated)
-        lokalizacja: Job location
-        wynagrodzenie_od: Minimum salary
-        wynagrodzenie_do: Maximum salary
-        waluta: Currency (PLN, EUR, USD)
-        utworzono: Job creation date
-        zaktualizowano: Job last update date
-        scraped_at: Timestamp when data was scraped
-        source: Source of the job posting (e.g., "justjoinit")
+        id: Unique job identifier.
+        group_id: Group identifier for related jobs.
+        stanowisko: Job title/position.
+        firma: Company name.
+        poziom: Seniority level (Trainee, Junior, Mid, Senior).
+        kategoria: Job category.
+        technologie: Required technologies (comma-separated string).
+        lokalizacja: Job location.
+        wynagrodzenie_od: Minimum salary boundary.
+        wynagrodzenie_do: Maximum salary boundary.
+        waluta: Currency (e.g., PLN, EUR, USD).
+        utworzono: Date the job posting was created on the source portal.
+        zaktualizowano: Date the job posting was last updated.
+        scraped_at: Timestamp indicating when the data was scraped.
+        data_pobrania: Local timestamp of database insertion.
+        source: Source portal of the job posting.
     """
     __tablename__: str = 'job_postings'
-    
+
     id: Column[str] = Column(String, primary_key=True)
     group_id: Column[str] = Column(String)
     stanowisko: Column[str] = Column(Text)
@@ -77,80 +86,82 @@ class JobPosting(Base):
 class DatabaseHandler:
     """
     Handler for database operations related to job postings.
-    
-    Manages SQLAlchemy engine, sessions, and CRUD operations.
+
+    Manages the SQLAlchemy engine, sessions, CRUD operations,
+    and data processing for market analysis.
     """
-    
+
     # Minimum percentage of offers with salary information required to consider a niche valid
-    MIN_SALARY_TRANSPARENCY_PERCENT = 10.0
-    
-    # Generic tags that don't represent specific technologies
-    GENERIC_TECHNOLOGY_TAGS = frozenset([
-        # Braki danych
-        'brak danych', 
-        
-        # Tryb i warunki pracy
-        'gotowość do pracy zmianowej', 'praca zdalna', 'praca hybrydowa', 
+    MIN_SALARY_TRANSPARENCY_PERCENT: float = 10.0
+
+    # Generic tags that do not represent specific IT technologies, used for filtering
+    GENERIC_TECHNOLOGY_TAGS: frozenset[str] = frozenset([
+        # Missing data
+        'brak danych',
+
+        # Working modes and conditions
+        'gotowość do pracy zmianowej', 'praca zdalna', 'praca hybrydowa',
         'praca stacjonarna', 'elastyczne godziny pracy',
-        
-        # Języki obce i kompetencje miękkie
-        'english', 'angielski', 'french', 'communication', 'team player', 
-        'negotiations skills', 'communication skills', 'analytical thinking', 
-        'analytical skills', 'problem solving', 'tech-savvy', 'zaangażowanie', 
+
+        # Foreign languages and soft skills
+        'english', 'angielski', 'french', 'communication', 'team player',
+        'negotiations skills', 'communication skills', 'analytical thinking',
+        'analytical skills', 'problem solving', 'tech-savvy', 'zaangażowanie',
         'zdolności analityczne', 'ai interest',
-        
-        # Narzędzia i metodyki (uznane za generyczne w Twoim algorytmie)
-        'agile', 'scrum', 'git', 'jira', 'confluence', 'devops', 'docker', 
+
+        # Tools and methodologies (considered generic for this algorithm)
+        'agile', 'scrum', 'git', 'jira', 'confluence', 'devops', 'docker',
         'kubernetes', 'ci/cd', 'itil', 'project management', 'agile project management',
-        
-        # Umiejętności biurowe i nietechniczne
-        'accounting', 'financial accounting', 'excel', 'ms excel', 'ms office', 
+
+        # Office and non-technical skills
+        'accounting', 'financial accounting', 'excel', 'ms excel', 'ms office',
         'office 365', 'microsoft office', 'powerpoint', 'ms project', 'rysunek techniczny',
-        
-        # Inne dziedziny i role biznesowe
-        'recruitment', 'tutoring', 'business analysis', 'business development', 
-        'customer support', 'helpdesk', 'customer experience (cx)', 'finance', 
+
+        # Other domains and business roles
+        'recruitment', 'tutoring', 'business analysis', 'business development',
+        'customer support', 'helpdesk', 'customer experience (cx)', 'finance',
         'finanse', 'procurement', 'supply chain', 'ilustracja', 'grafika', 'pmo',
-        
-        # Zbyt ogólne pojęcia IT (tzw. buzzwords)
-        'pc hardware skills', 'znajomość systemów it', 'data visualization', 
-        'cloud computing', 'cloud', 'it support', 'it', 'it basics', 'security', 
-        'cybersecurity', 'programming', 'bazy danych', 'networking', 'network', 
+
+        # Broad IT buzzwords
+        'pc hardware skills', 'znajomość systemów it', 'data visualization',
+        'cloud computing', 'cloud', 'it support', 'it', 'it basics', 'security',
+        'cybersecurity', 'programming', 'bazy danych', 'networking', 'network',
         'data', 'hardware', 'os', 'algorithms', 'math', 'matematyka',
-        
-        # Koncepcje testowania i inżynierii (zbyt ogólne)
-        'skalowalny kod', 'software testing concept', 'testing theory', 'testing', 
+
+        # Testing and engineering concepts (too generic)
+        'skalowalny kod', 'software testing concept', 'testing theory', 'testing',
         'manual testing', 'qa', 'automated testing', 'engineering principles', 'database design'
     ])
-    
+
     def __init__(self, database_url: str = Settings.DATABASE_URL) -> None:
         """
-        Initialize database handler.
-        
+        Initialize the database handler.
+
         Args:
-            database_url: SQLAlchemy database URL (default from settings)
+            database_url (str): SQLAlchemy database URL (defaults to Settings configuration).
         """
         self.engine: Engine = create_engine(database_url)
         self.Session: sessionmaker[Session] = sessionmaker(bind=self.engine)
-        
+
     def create_tables(self) -> None:
-        """Create all database tables if they don't exist."""
+        """Create all database tables defined by SQLAlchemy models if they do not exist."""
         Base.metadata.create_all(self.engine)
-    
-    def save_jobs(self, jobs_data: list[dict[str, Any]]) -> int:
+
+    def save_jobs(self, jobs_data: List[dict[str, Any]]) -> int:
         """
         Save or update job postings in the database.
-        
-        Uses merge to handle both inserts and updates based on job ID.
-        
+
+        Utilizes the 'merge' operation to handle both inserts of new jobs
+        and updates of existing jobs based on the primary key (job ID).
+
         Args:
-            jobs_data: List of job dictionaries with required fields
-            
+            jobs_data (List[dict[str, Any]]): List of job dictionaries with required fields.
+
         Returns:
-            Number of jobs processed
-            
+            int: The number of job records successfully processed.
+
         Raises:
-            Exception: If database operation fails
+            Exception: If the database transaction fails.
         """
         session: Session = self.Session()
         try:
@@ -179,16 +190,16 @@ class DatabaseHandler:
             raise e
         finally:
             session.close()
-    
+
     def clear_database(self) -> int:
         """
-        Clear all job postings from the database.
-        
+        Irreversibly delete all job postings from the database.
+
         Returns:
-            Number of deleted records
-            
+            int: The number of deleted records.
+
         Raises:
-            Exception: If database operation fails
+            Exception: If the database transaction fails.
         """
         session: Session = self.Session()
         try:
@@ -201,26 +212,26 @@ class DatabaseHandler:
             raise e
         finally:
             session.close()
-    
+
     def get_record_count(self) -> int:
         """
-        Get the total number of job postings in the database.
-        
+        Retrieve the total number of job postings currently stored.
+
         Returns:
-            Number of records in the database
+            int: Total record count in the database.
         """
         session: Session = self.Session()
         try:
             return session.query(JobPosting).count()
         finally:
             session.close()
-    
-    def get_all_jobs(self) -> list[dict[str, Any]]:
+
+    def get_all_jobs(self) -> List[dict[str, Any]]:
         """
-        Get all job postings from the database as a list of dictionaries.
-        
+        Retrieve all job postings from the database and format them as dictionaries.
+
         Returns:
-            List of job dictionaries
+            List[dict[str, Any]]: A list of dictionaries representing the job postings.
         """
         session: Session = self.Session()
         try:
@@ -248,9 +259,20 @@ class DatabaseHandler:
             session.close()
 
     @staticmethod
-    @st.cache_data(ttl=3600)  # ttl=3600 odświeży cache co godzinę, jeśli aplikacja działa w tle
-    def get_cached_market_data():
+    @st.cache_data(ttl=3600)  # ttl=3600 refreshes the cache every hour
+    def get_cached_market_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """
+        Fetch, process, and cache complete market data analysis pipelines.
 
+        Executes deduplication, salary preparation, market time calculation,
+        and niche aggregation.
+
+        Returns:
+            Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+                - df_raw: The base, cleaned DataFrame.
+                - df_exploded: DataFrame with technologies separated into individual rows.
+                - niche_analysis: Aggregated metrics per individual technology.
+        """
         db = DatabaseHandler()
         raw_jobs = db.get_all_jobs()
         if not raw_jobs:
@@ -267,145 +289,146 @@ class DatabaseHandler:
 
     def _deduplicate_jobs(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Remove duplicate job postings based on normalized company name and key attributes.
-        
+        Remove duplicate job postings based on normalized company name and core attributes.
+
         Args:
-            df: DataFrame with job postings
-            
+            df (pd.DataFrame): DataFrame containing raw job postings.
+
         Returns:
-            DataFrame with duplicates removed
+            pd.DataFrame: Deduplicated DataFrame.
         """
         df['Firma_Znormalizowana'] = df['Firma'].apply(self.__normalize_company_name)
-        
+
         df = df.drop_duplicates(
             subset=['Firma_Znormalizowana', 'Stanowisko', 'Technologie', 'Wynagrodzenie Od', 'Wynagrodzenie Do'],
             keep='first'
         )
-        
-        # Drop the temporary normalization column as it's no longer needed
+
+        # Drop the temporary normalization column to keep the DataFrame clean
         return df.drop(columns=['Firma_Znormalizowana'])
-    
+
     def _prepare_salary_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Prepare salary data for analysis without imputation.
-        
-        Strategy:
-        1. Convert salary columns to numeric
-        2. Calculate average salary ONLY for positions with real salary data
-        3. Keep track of which salaries are real vs missing
-        
+        Prepare salary data for analysis (without median imputation).
+
+        Process steps:
+        1. Fill missing currencies with "PLN".
+        2. Cast salary columns to numeric types.
+        3. Standardize hourly rates (<1000) to monthly salaries.
+        4. Calculate the average salary only for postings with complete bounds.
+
         Args:
-            df: DataFrame with job postings
-            
+            df (pd.DataFrame): DataFrame containing job postings.
+
         Returns:
-            DataFrame with prepared salary data and tracking columns
+            pd.DataFrame: DataFrame with sanitized salary data and tracking flags.
         """
         # Fill missing currency with "PLN" if the column exists
         if 'Waluta' in df.columns:
             df['Waluta'] = df['Waluta'].fillna("PLN")
 
-        # Convert to numeric, coercing errors to NaN
+        # Convert to numeric, coercing unparseable strings to NaN
         df['Wynagrodzenie Od'] = pd.to_numeric(df['Wynagrodzenie Od'], errors='coerce')
         df['Wynagrodzenie Do'] = pd.to_numeric(df['Wynagrodzenie Do'], errors='coerce')
 
-        # Convert outliers (hourly rates < 1000) to monthly salary
+        # Convert outliers (assumed to be hourly rates) to a standard monthly salary
         df.loc[df["Wynagrodzenie Od"] < 1000, "Wynagrodzenie Od"] *= 168
         df.loc[df["Wynagrodzenie Do"] < 1000, "Wynagrodzenie Do"] *= 168
-        
-        # Track which rows have real salary data (both from and to are present)
+
+        # Track rows that have real, explicitly stated salary boundaries
         df['Ma_Realne_Wynagrodzenie'] = (
             df['Wynagrodzenie Od'].notna() & df['Wynagrodzenie Do'].notna()
         )
-        
-        # Calculate the average salary ONLY for positions with complete salary data
+
+        # Calculate the median/average salary exclusively for valid salary rows
         df['Srednia_Kwota'] = df.apply(
             lambda row: (row['Wynagrodzenie Od'] + row['Wynagrodzenie Do']) / 2
             if row['Ma_Realne_Wynagrodzenie'] else None,
             axis=1
         )
-        
+
         return df
-    
+
     def _calculate_market_time(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Calculate how long each job posting has been on the market.
-        
+        Calculate the duration each job posting has been active on the market.
+
         Args:
-            df: DataFrame with job postings
-            
+            df (pd.DataFrame): DataFrame containing job postings.
+
         Returns:
-            DataFrame with market time calculated in days
+            pd.DataFrame: DataFrame augmented with a 'Czas_Na_Rynku_Dni' column.
         """
         df['Utworzono'] = pd.to_datetime(df['Utworzono'], utc=True)
         df['Scraped At'] = pd.to_datetime(df['Scraped At'], utc=True)
-        
-        # Convert date difference to days (yields NaN if a date is missing)
+
+        # Calculate timedelta in days (missing dates will yield NaN)
         df['Czas_Na_Rynku_Dni'] = (df['Scraped At'] - df['Utworzono']).dt.days
-        
+
         return df
-    
+
     def _explode_technologies(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Tokenize and explode technology strings into individual rows.
-        
-        Process:
-        1. Split comma-separated technology strings
-        2. Create separate row for each technology
-        3. Normalize text (lowercase, strip whitespace)
-        4. Filter out generic tags
-        
+        Tokenize and flatten the comma-separated technology strings into individual rows.
+
+        Process steps:
+        1. Split technology strings by commas.
+        2. Explode the lists so each technology gets its own DataFrame row.
+        3. Normalize text (convert to lowercase, trim whitespaces).
+        4. Filter out generic or meaningless tags using predefined sets.
+
         Args:
-            df: DataFrame with job postings
-            
+            df (pd.DataFrame): DataFrame containing grouped job postings.
+
         Returns:
-            DataFrame with one row per technology per job
+            pd.DataFrame: A normalized DataFrame with one technology per row.
         """
         df_tech = df.dropna(subset=['Technologie']).copy()
-        
-        # Convert strings to lists (splitting by comma)
+
+        # Split string representations into Python lists
         df_tech['Technologia_Pojedyncza'] = df_tech['Technologie'].astype(str).str.split(',')
-        
-        # Explode - creates a separate row for each technology in the list
+
+        # Flatten the dataset based on the generated lists
         df_exploded = df_tech.explode('Technologia_Pojedyncza')
-        
-        # Text normalization (lowercase, stripping whitespaces)
+
+        # Standardize formatting
         df_exploded['Technologia_Pojedyncza'] = df_exploded['Technologia_Pojedyncza'].str.strip().str.lower()
-        
-        # Filter out rows where technology is missing or marked as "brak danych"
+
+        # Exclude edge cases indicating missing data
         df_exploded = df_exploded[df_exploded['Technologia_Pojedyncza'] != "brak danych"]
 
-        # Filter out generic tags using the class constant
+        # Drop non-technical tags defined in the class constant
         df_exploded = df_exploded[~df_exploded['Technologia_Pojedyncza'].isin(self.GENERIC_TECHNOLOGY_TAGS)]
-        
+
         return df_exploded
-    
+
     def _calculate_salary_transparency_percent(self, salary_series: pd.Series) -> float:
         """
-        Calculate percentage of non-null salary values.
-        
+        Calculate the percentage of valid, non-null values within a salary series.
+
         Args:
-            salary_series: Series of salary values
-            
+            salary_series (pd.Series): The pandas Series containing numerical salary data.
+
         Returns:
-            Percentage of non-null values (0-100), rounded to 1 decimal
+            float: The percentage of valid values (0.0 to 100.0), rounded to one decimal place.
         """
         return ((salary_series.notna().sum() / len(salary_series)) * 100).round(1)
-    
+
     def _aggregate_niche_metrics(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Aggregate job data by technology to calculate niche metrics.
-        
-        Metrics calculated:
-        - Number of job offers (total)
-        - Median salary (from real data only, excluding missing values)
-        - Average time on market
-        - Percentage of offers with real salary information
-        
+        Aggregate job data grouping by specific technologies to calculate niche KPIs.
+
+        Calculated KPIs include:
+        - Total volume of offers.
+        - Median salary (derived strictly from explicitly stated salary bands).
+        - Average market exposure time.
+        - Percentage of offers providing transparent salary data.
+
         Args:
-            df: DataFrame with exploded technologies
-            
+            df (pd.DataFrame): Exploded DataFrame containing individualized technologies.
+
         Returns:
-            DataFrame with aggregated metrics per technology
+            pd.DataFrame: Aggregated DataFrame grouped by technology.
         """
         return df.groupby('Technologia_Pojedyncza').agg(
             Liczba_Ofert=('ID', 'count'),
@@ -413,22 +436,18 @@ class DatabaseHandler:
             Sredni_Czas_Zatrudnienia=('Czas_Na_Rynku_Dni', 'mean'),
             Procent_Ofert_Z_Widelkami=('Ma_Realne_Wynagrodzenie', lambda x: (x.sum() / len(x) * 100).round(1))
         ).reset_index()
-    
+
     def _filter_viable_niches(self, df: pd.DataFrame, min_jobs: int, max_jobs: int) -> pd.DataFrame:
         """
-        Filter technologies to identify viable "Blue Ocean" niches.
-        
-        Filtering criteria:
-        - Job count between min_jobs and max_jobs (market relevance without saturation)
-        - Salary transparency above minimum threshold
-        
+        Filter aggregated technology metrics to isolate viable 'Blue Ocean' niches.
+
         Args:
-            df: DataFrame with aggregated niche metrics
-            min_jobs: Minimum number of job offers
-            max_jobs: Maximum number of job offers
-            
+            df (pd.DataFrame): DataFrame containing aggregated niche metrics.
+            min_jobs (int): Minimum threshold for total job postings (ensures market relevance).
+            max_jobs (int): Maximum threshold for total job postings (avoids saturated markets).
+
         Returns:
-            Filtered and sorted DataFrame of viable niches
+            pd.DataFrame: Filtered DataFrame sorted by profitability and data transparency.
         """
         return df[
             (df['Liczba_Ofert'] >= min_jobs) &
@@ -439,54 +458,55 @@ class DatabaseHandler:
             ascending=[False, False, True]
         )
 
-
     def get_blue_ocean_niches(self, min_jobs: int = 15, max_jobs: int = 70) -> pd.DataFrame:
         """
-        Fetches data from the database and performs analysis to find "Blue Ocean" niches.
-        Uses median imputation for missing salaries and calculates the market exposure time
-        of job postings.
-        
-        Args:
-            min_jobs: Minimum number of job offers for a technology to be considered market-relevant.
-            max_jobs: Maximum number of job offers above which the market is considered saturated.
-            
-        Returns:
-            pd.DataFrame: A summary of potential niches with the following columns:
-                - Technologia_Pojedyncza: Technology name
-                - Liczba_Ofert: Number of job offers
-                - Mediana_Zarobkow: Median salary
-                - Sredni_Czas_Zatrudnienia: Average time on market (days)
-                - Procent_Ofert_Z_Widelkami: Percentage of offers with salary ranges (0-100)
-                
-            Results are filtered to include only technologies with:
-                - At least 10% of offers having salary information (salary transparency threshold)
-                - Job count between min_jobs and max_jobs
-                
-            Sorted by: Median salary (desc), Salary transparency % (desc), Time on market (asc)
-        """
-        # Fetch data as a list of dictionaries using the existing method
-        jobs_data = self.get_all_jobs()
-        
-        if not jobs_data:
-            return pd.DataFrame()  # Return an empty DataFrame if the database is empty
+        Fetch database records and execute the complete 'Blue Ocean' niche discovery pipeline.
 
-        # Process data through the refactored pipeline
+        Args:
+            min_jobs (int): Minimum number of job offers to be considered a viable niche.
+            max_jobs (int): Maximum number of job offers to avoid saturated 'Red Oceans'.
+
+        Returns:
+            pd.DataFrame: Summarized metrics of potential niches, containing:
+                - Technologia_Pojedyncza: Single technology identifier.
+                - Liczba_Ofert: Total volume of associated postings.
+                - Mediana_Zarobkow: Calculated median salary.
+                - Sredni_Czas_Zatrudnienia: Average posting age (in days).
+                - Procent_Ofert_Z_Widelkami: Salary transparency metric (0-100%).
+        """
+        jobs_data = self.get_all_jobs()
+
+        if not jobs_data:
+            return pd.DataFrame()
+
+        # Route the raw dictionary list through the data transformation pipeline
         df = pd.DataFrame(jobs_data)
         df = self._deduplicate_jobs(df)
         df = self._prepare_salary_data(df)
         df = self._calculate_market_time(df)
         df_exploded = self._explode_technologies(df)
         niche_analysis = self._aggregate_niche_metrics(df_exploded)
-        
+
         return self._filter_viable_niches(niche_analysis, min_jobs, max_jobs)
-    
+
     def __normalize_company_name(self, name: str) -> str:
+        """
+        Standardize and clean corporate names for accurate deduplication.
+
+        Strips legal entities, punctuation, and extraneous whitespace.
+
+        Args:
+            name (str): Raw company name.
+
+        Returns:
+            str: Normalized company name string.
+        """
         if pd.isna(name) or name == "Brak danych":
             return "nieznana"
-        
+
         name = str(name).lower()
-        
-        # 1. Lista form do usunięcia (od najdłuższych do najkrótszych)
+
+        # 1. Define regular expressions for corporate entity identifiers (longest to shortest)
         legal_forms = [
             r'spółka z ograniczoną odpowiedzialnością',
             r'oddział w polsce',
@@ -502,19 +522,19 @@ class DatabaseHandler:
             r's\.?\s*a\.?',                            # s.a. / sa
             r's\.?\s*c\.?',                            # s.c.
             r'\blimited\b', r'\bltd\.?\b', r'\bllc\b',
-            r'\bgmbh\b', r'\bag\b', r'\bkft\.?\b', 
+            r'\bgmbh\b', r'\bag\b', r'\bkft\.?\b',
             r'\bn\.?\s*v\.?\b', r'\bvvag\b', r'\bgroup\b'
         ]
-        
-        # 2. Usuwanie form prawnych
+
+        # 2. Iterate and strip out identified corporate legal forms
         for form in legal_forms:
-            # Używamy zamiany, ignorując polskie znaki diakrytyczne jako granice słów
+            # Substitute matching patterns with spaces, treating Polish diacritics natively
             name = re.sub(form, ' ', name)
-            
-        # 3. Usuwanie znaków interpunkcyjnych (w tym cudzysłowów w np. "MARITEX")
+
+        # 3. Strip punctuation characters (e.g., quotations surrounding brand names)
         name = re.sub(r'[^\w\s]', ' ', name)
-        
-        # 4. Usunięcie nadmiarowych spacji
+
+        # 4. Collapse multiple spaces into a single space and trim edges
         name = re.sub(r'\s+', ' ', name).strip()
         
         return name

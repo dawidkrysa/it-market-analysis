@@ -1,36 +1,37 @@
 """
 Radar Mikro-nisz - Main Streamlit Page.
 
-Strona domowa aplikacji Streamlit, która wyświetla szczegóły dot. projektu
-oraz wprowadzenie do analizy rynku pracy IT.
+The home page of the Streamlit application displaying project details
+and an introduction to the IT job market analysis.
 """
 
 import streamlit as st
 
-# Konfiguracja strony (powinna być zawsze na samej górze pliku wejściowego)
+# Page configuration (must always be the first Streamlit command in the entry file)
 st.set_page_config(
     page_title="Radar Mikro-Nisz IT",
     page_icon="🧭",
     layout="wide"
 )
 
-# --- Nagłówek i Logo ---
+# --- Header and Logo ---
 col1, col2 = st.columns([4, 1], vertical_alignment="center")
 
 with col1:
-    # Dodano główny, krótki tytuł i przeniesiono długi tytuł akademicki do subheadera
+    # Added a main, short title and moved the long academic title to the subheader
     st.title("🧭 Radar Mikro-Nisz IT")
     st.subheader("Wpływ niszowości technologii na opłacalność i czas zatrudnienia")
 
 with col2:
     try:
         st.image("assets/wsb_logo.png", width=150)
-    except:
-        st.caption("[Logo Uczelni]") # Zabezpieczenie, jeśli ścieżka do pliku nie zadziała
+    except Exception:
+        # Fallback in case the file path is invalid or the image is missing
+        st.caption("[Logo Uczelni]")
 
 st.markdown("---")
 
-# --- Wprowadzenie ---
+# --- Introduction ---
 st.markdown("""
 Witamy w interaktywnym raporcie analitycznym!  
 Aplikacja ta bada zjawiska **asymetrii informacji** i **bezrobocia strukturalnego** na współczesnym rynku pracy IT w Polsce.
@@ -41,7 +42,7 @@ Zamiast zgadywać, w jakim kierunku rozwijać karierę, opieramy się na twardyc
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown("### 📌 Czego dowiesz się z tej aplikacji?")
 
-# --- Karty nawigacyjne (Feature Cards) zamiast zwykłej listy ---
+# --- Feature Cards (instead of a standard list) ---
 f_col1, f_col2 = st.columns(2)
 
 with f_col1:
@@ -63,9 +64,9 @@ with f_col2:
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown("👈 **Wybierz interesującą Cię sekcję z menu bocznego, aby rozpocząć.**")
 
-# --- Stopka Akademicka ---
+# --- Academic Footer ---
 st.markdown("---")
-# Używamy st.caption dla szarego, dyskretnego tekstu na dole strony zamiast krzyczących niebieskich st.info
+# Use st.caption for a subtle, grey text at the bottom instead of a prominent st.info block
 st.caption("""
 **Projekt zrealizowany w ramach przedmiotu Projekt Semestralny II.** 👨‍💻 **Zespół badawczy:** Dawid Krysa, Wojciech Pomarkiewicz, Wiktor Daniel, Krzysztof Krajewski
 """)
