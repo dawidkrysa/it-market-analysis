@@ -23,11 +23,11 @@ class Settings:
     LOG_FILE: str = os.getenv('LOG_FILE', '/app/logs/app.log')
 
     DATABASE_URL: str = os.getenv(
-        'DATABASE_URL', 
-        'postgresql://navigator:DeepDive_2026_Secure@db:5432/blue_ocean_db'
+        'DATABASE_URL',
+        'postgresql://CHANGE_ME:CHANGE_ME@db:5432/CHANGE_ME'
     )
 
-    ADMIN_KEY: str = os.getenv('ADMIN_KEY','defau!tYolo511')
+    ADMIN_KEY: str = os.getenv('ADMIN_KEY', 'CHANGE_ME')
 
     
     @classmethod
