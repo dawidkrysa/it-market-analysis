@@ -1,38 +1,38 @@
 {
     "name": "Radar Mikro Nisz - Dev Container",
 
-    // Ścieżka do Twojego głównego pliku compose (zakładając, że ten plik jest w .devcontainer/)
+    // Path to the main compose file(s) (assuming this file lives in .devcontainer/)
     "dockerComposeFile": [
         "../docker-compose.yml",
         "../docker-compose.dev.yml"
     ],
 
-    // Nazwa usługi, w której chcesz pracować
+    // Name of the service to work in
     "service": "streamlit-app",
 
-    // Folder roboczy wewnątrz kontenera (zgodnie z Twoim docker-compose.yml)
+    // Working folder inside the container (matches docker-compose.yml)
     "workspaceFolder": "/app",
 
-    // Instalacja dodatkowych narzędzi bezpośrednio w kontenerze
+    // Install additional tools directly inside the container
     "features": {
         "ghcr.io/devcontainers/features/git:1": {},
         "ghcr.io/devcontainers/features/github-cli:1": {}
     },
 
-    // Ustawienia specyficzne dla IDE
+    // IDE-specific settings
     "customizations": {
-        // Konfiguracja dla PyCharm Professional
+        // PyCharm Professional configuration
         "jetbrains": {
             "plugins": [
-                "com.jetbrains.python",    // Wsparcie dla Pythona
-                "com.intellij.database",  // Narzędzia do bazy danych (Postgres)
-                "jupyter"                 // Obsługa notebooków bez portu 8888
+                "com.jetbrains.python",    // Python support
+                "com.intellij.database",  // Database tools (Postgres)
+                "jupyter"                 // Notebook support without port 8888
             ],
             "settings": {
-                "python.interpreterPath": "python" 
+                "python.interpreterPath": "python"
             }
         },
-        // Zachowanie kompatybilności z VS Code
+        // Kept for VS Code compatibility
         "vscode": {
             "extensions": [
                 "ms-python.python",
@@ -44,12 +44,12 @@
         }
     },
 
-    // Ważne: PyCharm sam obsłuży tunelowanie, nie potrzebujesz forwardPorts dla Jupytera
-    "forwardPorts": [8501], // Tylko Streamlit, byś mógł go widzieć w przeglądarce
+    // Note: PyCharm handles tunneling itself, so forwardPorts isn't needed for Jupyter
+    "forwardPorts": [8501], // Streamlit only, so you can view it in the browser
 
-    // Opcjonalnie: komenda uruchamiana po zbudowaniu kontenera
+    // Optional: command to run after the container is built
     // "postCreateCommand": "pip install -r requirements.txt",
 
-    // Akcja po zamknięciu IDE (lepiej 'none', żeby baza danych db-1 nie padała)
+    // Action on IDE close (better 'none', so the db-1 database doesn't get stopped)
     "shutdownAction": "none"
 }
