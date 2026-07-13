@@ -1,4 +1,4 @@
-# 🧭 Radar Mikro-Nisz IT
+# Radar Mikro-Nisz IT
 
 **Interactive analysis of information asymmetry in the Polish IT job market.** A Streamlit application that mines job postings scraped from industry portals to identify technology "blue oceans" — niches with high demand but low candidate supply — and statistically verifies whether the market actually pays a premium for them.
 
