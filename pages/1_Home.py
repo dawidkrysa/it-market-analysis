@@ -8,11 +8,7 @@ and an introduction to the IT job market analysis.
 import streamlit as st
 
 # Page configuration (must always be the first Streamlit command in the entry file)
-st.set_page_config(
-    page_title="Radar Mikro-Nisz IT",
-    page_icon="🧭",
-    layout="wide"
-)
+st.set_page_config(page_title="Radar Mikro-Nisz IT", page_icon="🧭", layout="wide")
 
 # --- Header and Logo ---
 col1, col2 = st.columns([4, 1], vertical_alignment="center")
@@ -68,5 +64,5 @@ st.markdown("👈 **Wybierz interesującą Cię sekcję z menu bocznego, aby roz
 st.markdown("---")
 # Use st.caption for a subtle, grey text at the bottom instead of a prominent st.info block
 st.caption("""
-**Projekt zrealizowany w ramach przedmiotu Projekt Semestralny II.** 👨‍💻 **Zespół badawczy:** Dawid Krysa, Wojciech Pomarkiewicz, Wiktor Daniel, Krzysztof Krajewski
+**Projekt zrealizowany w ramach przedmiotu Projekt Semestralny II i rozwijany w ramach Projekt Semestralny III.** 👨‍💻 **Zespół badawczy:** Dawid Krysa, Wojciech Pomarkiewicz, Wiktor Daniel, Krzysztof Krajewski
 """)
