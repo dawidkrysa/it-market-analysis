@@ -88,22 +88,6 @@ df_market = load_market_data(typ_wynagrodzenia)
 
 st.divider()
 
-# Create an expander section for a quick local "what-if" override at the bottom
-tables_expander = st.expander("📋 Podgląd / tymczasowa edycja danych bootcampów")
-
-with tables_expander:
-    st.caption(
-        "Te zmiany są tylko na potrzeby tej sesji i nie zapisują się do bazy. "
-        "Żeby trwale dodać, zaktualizować lub usunąć bootcamp, użyj zakładki "
-        "'🎓 Bootcampy' w panelu administracyjnym (Silnik Danych)."
-    )
-    edited_df_bootcamp = st.data_editor(
-        df_bootcamp.drop(columns=["ID"], errors="ignore"),
-        num_rows="dynamic",
-        width="stretch",
-        key="bootcamp_editor",
-    )
-
 # --- Calculator Engine (Rendered in the top container) ---
 
 with calc_container:
@@ -116,10 +100,13 @@ with calc_container:
             "Czas szukania pracy (w miesiącach):", min_value=0.0, value=3.0, step=0.5
         )
 
-        bootcamp_techs = (
-            [] if edited_df_bootcamp.empty else edited_df_bootcamp["Technologia"].unique()
-        )
+        bootcamp_techs = [] if df_bootcamp.empty else df_bootcamp["Technologia"].unique()
         wybrana_technologia = st.selectbox("Wybierz technologię (Bootcamp):", bootcamp_techs)
+        if df_bootcamp.empty:
+            st.caption(
+                "Brak danych o bootcampach - dodaj je w panelu administracyjnym "
+                "(Silnik Danych → 🎓 Bootcampy)."
+            )
     with col2:
         czas_przepracowany_msc = st.number_input(
             "Czas zatrudnienia i zarabiania (w miesiącach):", min_value=0.0, value=12.0, step=1.0
@@ -161,9 +148,7 @@ with calc_container:
     try:
         if wybrana_technologia:
             # Retrieve bootcamp education costs and duration
-            wiersz_bootcamp = edited_df_bootcamp[
-                edited_df_bootcamp["Technologia"] == wybrana_technologia
-            ].iloc[0]
+            wiersz_bootcamp = df_bootcamp[df_bootcamp["Technologia"] == wybrana_technologia].iloc[0]
             koszt_bootcampu = _or_zero(wiersz_bootcamp["Mediana Kosztu"])
             czas_edukacji_dni = _or_zero(wiersz_bootcamp["Mediana Czasu (dni)"])
             czas_edukacji_msc = (
