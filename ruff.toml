@@ -1,0 +1,9 @@
+target-version = "py313"
+line-length = 100
+exclude = ["notebooks", ".venv"]
+
+[lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[format]
+quote-style = "double"
