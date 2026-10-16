@@ -8,6 +8,7 @@ between technology niche size, vacancy duration, and salary levels.
 
 import pandas as pd
 import plotly.express as px
+import statsmodels.api as sm
 import streamlit as st
 from scipy import stats
 
@@ -32,6 +33,10 @@ with st.expander("❓ Słowniczek pojęć statystycznych (Rozwiń, jeśli potrze
     * **Wartość p (p-value):** Prawdopodobieństwo, że nasz wynik to tylko zbieg okoliczności (szum w danych).
       * **p < 0.05** oznacza, że mamy mniej niż 5% szans na przypadek. Uznajemy wtedy wynik za **istotny statystycznie** (prawdziwy trend).
     * **Test Spearmana / Kendalla:** Dwa różne wzory matematyczne do liczenia korelacji. Używamy ich, ponieważ zarobki w IT nie rosną idealnie "od linijki", a te testy świetnie radzą sobie z takimi danymi.
+    * **Regresja OLS:** Dopasowuje linię prostą (y = a + b·x) do danych metodą najmniejszych kwadratów. Współczynnik **b (nachylenie)** mówi, o ile zmienia się wynagrodzenie przy wzroście x o 1 jednostkę.
+    * **R² (R-kwadrat):** Odsetek (0-1) zmienności wynagrodzeń, który model wyjaśnia samym x. Blisko 1 = model dobrze pasuje, blisko 0 = x prawie nic nie tłumaczy.
+    * **Skośność:** Mówi, czy rozkład danych jest symetryczny. Dodatnia = ogon wartości wysokich (nieliczne bardzo drogie oferty ciągną średnią w górę), ujemna = odwrotnie.
+    * **Kurtoza:** Mówi o "grubości ogonów" rozkładu względem rozkładu normalnego. Wysoka wartość = więcej skrajnych wartości odstających niż w typowym rozkładzie.
     """)
 
 
@@ -177,6 +182,61 @@ def get_significance_label(p_value: float) -> str:
     return "🔴 Nieistotna (przypadek)"
 
 
+def fit_ols(x: pd.Series, y: pd.Series) -> dict:
+    """
+    Fit a simple OLS regression (y = intercept + slope * x) via statsmodels.
+
+    Args:
+        x (pd.Series): Independent variable.
+        y (pd.Series): Dependent variable (salary).
+
+    Returns:
+        dict: r2, r2_adj, intercept, slope, slope_p (p-value of the slope),
+            slope_ci (95% confidence interval tuple), and the full
+            statsmodels summary as text.
+    """
+    model = sm.OLS(y, sm.add_constant(x)).fit()
+    ci_low, ci_high = model.conf_int().iloc[1]
+    return {
+        "r2": model.rsquared,
+        "r2_adj": model.rsquared_adj,
+        "intercept": model.params.iloc[0],
+        "slope": model.params.iloc[1],
+        "slope_p": model.pvalues.iloc[1],
+        "slope_ci": (ci_low, ci_high),
+        "summary": str(model.summary()),
+    }
+
+
+# ==========================================
+# DESCRIPTIVE STATISTICS
+# ==========================================
+st.markdown("---")
+st.header("0️⃣ Statystyki Opisowe")
+st.caption(
+    f"Policzone na {len(correlation_data)} technologiach spełniających aktualne filtry w panelu bocznym."
+)
+
+desc_source = correlation_data[["Liczba_Ofert", "Mediana_Zarobkow", "Sredni_Czas_Zatrudnienia"]]
+desc_table = desc_source.agg(["mean", "median", "std", "min", "max"]).T
+desc_table["skośność"] = desc_source.skew()
+desc_table["kurtoza"] = desc_source.kurt()
+desc_table.index = [
+    "Liczba Ofert",
+    f"Mediana Wynagrodzeń ({jednostka_label})",
+    "Śr. Czas Aktywności Oferty (dni)",
+]
+desc_table.columns = [
+    "Średnia",
+    "Mediana",
+    "Odch. std.",
+    "Min",
+    "Max",
+    "Skośność",
+    "Kurtoza",
+]
+st.dataframe(desc_table.round(2), width="stretch")
+
 # ==========================================
 # ANALYSIS 1: Number of Offers vs. Salary
 # ==========================================
@@ -206,6 +266,33 @@ with col2:
         get_significance_label(kendall_off_p),
         help="Test pomocniczy, często dokładniejszy dla małych próbek danych.",
     )
+
+# Fit and display an OLS regression model
+ols_off = fit_ols(correlation_data["Liczba_Ofert"], correlation_data["Mediana_Zarobkow"])
+col1b, col2b, col3b = st.columns(3)
+with col1b:
+    st.metric(
+        "R² modelu OLS",
+        f"{ols_off['r2']:.3f}",
+        help="Jaką część zmienności wynagrodzeń wyjaśnia liczba ofert.",
+    )
+with col2b:
+    st.metric(
+        "Nachylenie (β)",
+        f"{ols_off['slope']:.2f} {jednostka_label}",
+        get_significance_label(ols_off["slope_p"]),
+        help="O ile zmienia się mediana wynagrodzeń przy wzroście liczby ofert o 1.",
+    )
+with col3b:
+    st.metric(
+        "95% przedział ufności dla β",
+        f"[{ols_off['slope_ci'][0]:.2f}; {ols_off['slope_ci'][1]:.2f}]",
+    )
+st.caption(
+    f"Model: Mediana Wynagrodzeń = {ols_off['intercept']:.1f} + {ols_off['slope']:.3f} × Liczba Ofert"
+)
+with st.expander("Pełne podsumowanie modelu OLS (statsmodels)"):
+    st.code(ols_off["summary"])
 
 # Render scatter plot with trendline
 fig1 = px.scatter(
@@ -269,6 +356,36 @@ with col4:
     st.metric(
         "Korelacja Kendalla (τ)", f"{kendall_time:.3f}", get_significance_label(kendall_time_p)
     )
+
+# Fit and display an OLS regression model
+ols_time = fit_ols(
+    correlation_data["Sredni_Czas_Zatrudnienia"], correlation_data["Mediana_Zarobkow"]
+)
+col3b, col4b, col5b = st.columns(3)
+with col3b:
+    st.metric(
+        "R² modelu OLS",
+        f"{ols_time['r2']:.3f}",
+        help="Jaką część zmienności wynagrodzeń wyjaśnia czas aktywności oferty.",
+    )
+with col4b:
+    st.metric(
+        "Nachylenie (β)",
+        f"{ols_time['slope']:.2f} {jednostka_label}/dzień",
+        get_significance_label(ols_time["slope_p"]),
+        help="O ile zmienia się mediana wynagrodzeń przy wzroście czasu aktywności o 1 dzień.",
+    )
+with col5b:
+    st.metric(
+        "95% przedział ufności dla β",
+        f"[{ols_time['slope_ci'][0]:.2f}; {ols_time['slope_ci'][1]:.2f}]",
+    )
+st.caption(
+    f"Model: Mediana Wynagrodzeń = {ols_time['intercept']:.1f} + "
+    f"{ols_time['slope']:.3f} × Śr. Czas Aktywności"
+)
+with st.expander("Pełne podsumowanie modelu OLS (statsmodels)"):
+    st.code(ols_time["summary"])
 
 # Render scatter plot with trendline
 fig2 = px.scatter(
