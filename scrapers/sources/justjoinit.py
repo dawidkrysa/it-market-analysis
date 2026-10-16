@@ -1,21 +1,24 @@
-import requests
 import logging
 from datetime import datetime
-from typing import Any, List, Dict
+from typing import Any
+
+import requests
+
 from .base import BaseScraper
 
 logger = logging.getLogger(__name__)
+
 
 class JustJoinIT(BaseScraper):
     API_URL = "https://justjoin.it/api/candidate-api/offers"
 
     def __init__(self) -> None:
-        """ Initializes the JustJoinIT scraper. """
+        """Initializes the JustJoinIT scraper."""
         super().__init__(source_name="justjoinit")
 
-    def fetch_raw_data(self, experience_levels: str = "junior") -> List[Dict[str, Any]]:
-        """ 
-        Fetches raw job data from the JustJoin.it API. 
+    def fetch_raw_data(self, experience_levels: str = "junior") -> list[dict[str, Any]]:
+        """
+        Fetches raw job data from the JustJoin.it API.
 
         Args:
             experience_levels: Comma-separated experience levels to filter by (default: "junior")
@@ -23,10 +26,8 @@ class JustJoinIT(BaseScraper):
         Returns:
             List of raw job data dictionaries.
         """
-        params = {
-            "experienceLevels": experience_levels,
-            "itemsCount": 1500
-        }
+        levels = [lvl.strip() for lvl in experience_levels.split(",") if lvl.strip()]
+        params = {"experienceLevels": levels, "itemsCount": 1500}
         logger.info(f"Fetching jobs from {self.API_URL}")
         response = requests.get(self.API_URL, params=params, timeout=30)
         response.raise_for_status()
@@ -35,11 +36,11 @@ class JustJoinIT(BaseScraper):
         offers = data.get("data", [])
         logger.info(f"Received {len(offers)} job offers from API")
         return offers
-    
-    def parse_data(self, raw_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """ 
+
+    def parse_data(self, raw_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """
         Parses the raw job data from JustJoin.it into a standardized format.
-        
+
         Args:
             raw_data: List of raw job data dictionaries.
 
@@ -53,56 +54,87 @@ class JustJoinIT(BaseScraper):
             except Exception as e:
                 logger.warning(f"Error parsing offer {offer.get('slug')}: {e}")
         return parsed_jobs
-    
 
-    def _parse_single_offer(self, offer: dict[str, Any]) -> List[Dict[str, Any]]:
+    def _parse_single_offer(self, offer: dict[str, Any]) -> list[dict[str, Any]]:
         """
         Parses a single job offer from JustJoin.it into the standardized format.
-        
-        Args:    
+
+        Args:
             offer: Raw job offer dictionary from the API.
-        
+
         Returns:
             List of parsed job dictionaries (one per location).
         """
         base_slug = offer.get("slug", "")
-        if not base_slug: return []
+        if not base_slug:
+            return []
 
         # Seniority
         seniority = offer.get("experienceLevel", "Junior").strip().upper()
 
         # Dates
         published_at = offer.get("publishedAt")
-        utworzono = datetime.fromisoformat(published_at.replace('Z', '+00:00')) if published_at else datetime.now()
+        utworzono = (
+            datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+            if published_at
+            else datetime.now()
+        )
 
         # Technologies
         required_skills = offer.get("requiredSkills", [])
         tech_str = ", ".join([s.get("name", "") for s in required_skills if s.get("name")])
 
-        # Salaries (simplified for readability)
-        salary_from, salary_to, currency = None, None, "PLN"
+        # Salaries. An offer can list several contract variants at once (e.g. both
+        # B2B and UoP); only the original (non currency-converted) entries are used,
+        # and each is routed by its native rate unit: hourly -> godzinowe bucket,
+        # gross -> UoP bucket, net -> B2B bucket.
+        currency = "PLN"
+        wynagrodzenie_uop_od = wynagrodzenie_uop_do = None
+        wynagrodzenie_b2b_od = wynagrodzenie_b2b_do = None
+        wynagrodzenie_godzinowe_od = wynagrodzenie_godzinowe_do = None
         for emp in offer.get("employmentTypes", []):
-            if emp.get("from"):
-                salary_from, salary_to, currency = emp.get("from"), emp.get("to"), emp.get("currency", "PLN")
-                break
+            if emp.get("currencySource") != "original":
+                continue
+            amount_from, amount_to = emp.get("fromPerUnit"), emp.get("toPerUnit")
+            if amount_from is None and amount_to is None:
+                continue
+            currency = emp.get("currency", currency)
+            unit = (emp.get("unit") or "").strip().lower()
+            if unit == "hour":
+                if wynagrodzenie_godzinowe_od is None and wynagrodzenie_godzinowe_do is None:
+                    wynagrodzenie_godzinowe_od, wynagrodzenie_godzinowe_do = amount_from, amount_to
+            elif emp.get("gross"):
+                if wynagrodzenie_uop_od is None and wynagrodzenie_uop_do is None:
+                    wynagrodzenie_uop_od, wynagrodzenie_uop_do = amount_from, amount_to
+            else:
+                if wynagrodzenie_b2b_od is None and wynagrodzenie_b2b_do is None:
+                    wynagrodzenie_b2b_od, wynagrodzenie_b2b_do = amount_from, amount_to
 
         results = []
-        locations = offer.get("locations", [{"city": offer.get("city", "Nieznana"), "slug": base_slug}])
-        
+        locations = offer.get(
+            "locations", [{"city": offer.get("city", "Nieznana"), "slug": base_slug}]
+        )
+
         for loc in locations:
-            results.append({
-                "ID": loc.get("slug", base_slug),
-                "Stanowisko": offer.get("title", "Brak tytułu"),
-                "Firma": offer.get("companyName", "Nieznana firma"),
-                "Poziom": seniority,
-                "Kategoria": offer.get("category", {}).get("key", ""),
-                "Technologie": tech_str,
-                "Lokalizacja": loc.get("city", "Nieznana"),
-                "Wynagrodzenie Od": salary_from,
-                "Wynagrodzenie Do": salary_to,
-                "Waluta": currency,
-                "Utworzono": utworzono,
-                "Zaktualizowano": utworzono,
-                "Source": self.source_name
-            })
+            results.append(
+                {
+                    "ID": loc.get("slug", base_slug),
+                    "Stanowisko": offer.get("title", "Brak tytułu"),
+                    "Firma": offer.get("companyName", "Nieznana firma"),
+                    "Poziom": seniority,
+                    "Kategoria": offer.get("category", {}).get("key", ""),
+                    "Technologie": tech_str,
+                    "Lokalizacja": loc.get("city", "Nieznana"),
+                    "Wynagrodzenie UoP Od": wynagrodzenie_uop_od,
+                    "Wynagrodzenie UoP Do": wynagrodzenie_uop_do,
+                    "Wynagrodzenie B2B Od": wynagrodzenie_b2b_od,
+                    "Wynagrodzenie B2B Do": wynagrodzenie_b2b_do,
+                    "Wynagrodzenie Godzinowe Od": wynagrodzenie_godzinowe_od,
+                    "Wynagrodzenie Godzinowe Do": wynagrodzenie_godzinowe_do,
+                    "Waluta": currency,
+                    "Utworzono": utworzono,
+                    "Zaktualizowano": utworzono,
+                    "Source": self.source_name,
+                }
+            )
         return results

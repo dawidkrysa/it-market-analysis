@@ -5,42 +5,49 @@ This module provides the necessary models and database operations
 to save, retrieve, clean, and analyze job market data.
 """
 
-from sqlalchemy import Engine, create_engine, Column, String, Integer, DateTime, Text
+import enum
+import re
+from datetime import UTC, datetime
+from typing import Any
+
+import pandas as pd
+import streamlit as st
+from sqlalchemy import Column, DateTime, Engine, Integer, String, Text, create_engine
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime, timezone
-from typing import Any, Tuple, List
-import pandas as pd
-import re
-import streamlit as st
-
 from sqlalchemy.orm.session import Session
-from config.settings import Settings
 
-import enum
-from sqlalchemy import Enum as SQLEnum
+from config.settings import Settings
 
 Base = declarative_base()
 
+
 class SeniorityLevel(enum.Enum):
     """Enumeration for job seniority levels."""
+
     TRAINEE = "TRAINEE"
     JUNIOR = "JUNIOR"
     MID = "MID"
     SENIOR = "SENIOR"
 
+
 class Currency(enum.Enum):
     """Enumeration for supported currencies."""
+
     PLN = "PLN"
     EUR = "EUR"
     USD = "USD"
 
+
 class Source(enum.Enum):
     """Enumeration for data scraping sources."""
+
     JUSTJOINIT = "JUSTJOINIT"
     NOFLUFFJOBS = "NOFLUFFJOBS"
     THEPROTOCOLIT = "THEPROTOCOLIT"
     MANUAL = "MANUAL"
+
 
 class JobPosting(Base):
     """
@@ -55,8 +62,12 @@ class JobPosting(Base):
         kategoria: Job category.
         technologie: Required technologies (comma-separated string).
         lokalizacja: Job location.
-        wynagrodzenie_od: Minimum salary boundary.
-        wynagrodzenie_do: Maximum salary boundary.
+        wynagrodzenie_uop_od: Minimum gross monthly salary for an employment contract (UoP).
+        wynagrodzenie_uop_do: Maximum gross monthly salary for an employment contract (UoP).
+        wynagrodzenie_b2b_od: Minimum net monthly rate for a B2B contract.
+        wynagrodzenie_b2b_do: Maximum net monthly rate for a B2B contract.
+        wynagrodzenie_godzinowe_od: Minimum hourly rate, regardless of contract form.
+        wynagrodzenie_godzinowe_do: Maximum hourly rate, regardless of contract form.
         waluta: Currency (e.g., PLN, EUR, USD).
         utworzono: Date the job posting was created on the source portal.
         zaktualizowano: Date the job posting was last updated.
@@ -64,7 +75,8 @@ class JobPosting(Base):
         data_pobrania: Local timestamp of database insertion.
         source: Source portal of the job posting.
     """
-    __tablename__: str = 'job_postings'
+
+    __tablename__: str = "job_postings"
 
     id = Column(String, primary_key=True)
     group_id = Column(String)
@@ -74,13 +86,17 @@ class JobPosting(Base):
     kategoria = Column(Text)
     technologie = Column(Text)
     lokalizacja = Column(Text)
-    wynagrodzenie_od = Column(Integer)
-    wynagrodzenie_do = Column(Integer)
+    wynagrodzenie_uop_od = Column(Integer, nullable=True)
+    wynagrodzenie_uop_do = Column(Integer, nullable=True)
+    wynagrodzenie_b2b_od = Column(Integer, nullable=True)
+    wynagrodzenie_b2b_do = Column(Integer, nullable=True)
+    wynagrodzenie_godzinowe_od = Column(Integer, nullable=True)
+    wynagrodzenie_godzinowe_do = Column(Integer, nullable=True)
     waluta = Column(SQLEnum(Currency), nullable=True)
     utworzono = Column(DateTime)
     zaktualizowano = Column(DateTime)
-    scraped_at = Column(DateTime, default=datetime.now(timezone.utc))
-    data_pobrania = Column(DateTime, default=datetime.now(timezone.utc))
+    scraped_at = Column(DateTime, default=datetime.now(UTC))
+    data_pobrania = Column(DateTime, default=datetime.now(UTC))
     source = Column(SQLEnum(Source), nullable=True)
 
 
@@ -103,34 +119,40 @@ def __normalize_company_name(name: str) -> str:
 
     # 1. Define regular expressions for corporate entity identifiers (longest to shortest)
     legal_forms = [
-        r'spółka z ograniczoną odpowiedzialnością',
-        r'oddział w polsce',
-        r'prosta spółka akcyjna',
-        r'spółka akcyjna',
-        r'spółka komandytowa',
-        r'spółka jawna',
-        r'sp\.?\s*z\s*o\.?\s*o\.?\s*sp\.?\s*k\.?', # sp. z o.o. sp. k.
-        r'sp\.?\s*z\s*o\.?\s*o\.?',                # sp. z o.o. / sp z o o
-        r'sp\.?\s*k\.?',                           # sp. k.
-        r'p\.?\s*s\.?\s*a\.?',                     # p.s.a.
-        r'prosta\s+s\.?\s*a\.?',                   # prosta s.a.
-        r's\.?\s*a\.?',                            # s.a. / sa
-        r's\.?\s*c\.?',                            # s.c.
-        r'\blimited\b', r'\bltd\.?\b', r'\bllc\b',
-        r'\bgmbh\b', r'\bag\b', r'\bkft\.?\b',
-        r'\bn\.?\s*v\.?\b', r'\bvvag\b', r'\bgroup\b'
+        r"spółka z ograniczoną odpowiedzialnością",
+        r"oddział w polsce",
+        r"prosta spółka akcyjna",
+        r"spółka akcyjna",
+        r"spółka komandytowa",
+        r"spółka jawna",
+        r"sp\.?\s*z\s*o\.?\s*o\.?\s*sp\.?\s*k\.?",  # sp. z o.o. sp. k.
+        r"sp\.?\s*z\s*o\.?\s*o\.?",  # sp. z o.o. / sp z o o
+        r"sp\.?\s*k\.?",  # sp. k.
+        r"p\.?\s*s\.?\s*a\.?",  # p.s.a.
+        r"prosta\s+s\.?\s*a\.?",  # prosta s.a.
+        r"s\.?\s*a\.?",  # s.a. / sa
+        r"s\.?\s*c\.?",  # s.c.
+        r"\blimited\b",
+        r"\bltd\.?\b",
+        r"\bllc\b",
+        r"\bgmbh\b",
+        r"\bag\b",
+        r"\bkft\.?\b",
+        r"\bn\.?\s*v\.?\b",
+        r"\bvvag\b",
+        r"\bgroup\b",
     ]
 
     # 2. Iterate and strip out identified corporate legal forms
     for form in legal_forms:
         # Substitute matching patterns with spaces, treating Polish diacritics natively
-        name = re.sub(form, ' ', name)
+        name = re.sub(form, " ", name)
 
     # 3. Strip punctuation characters (e.g., quotations surrounding brand names)
-    name = re.sub(r'[^\w\s]', ' ', name)
+    name = re.sub(r"[^\w\s]", " ", name)
 
     # 4. Collapse multiple spaces into a single space and trim edges
-    name = re.sub(r'\s+', ' ', name).strip()
+    name = re.sub(r"\s+", " ", name).strip()
 
     return name
 
@@ -151,12 +173,22 @@ def _aggregate_niche_metrics(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Aggregated DataFrame grouped by technology.
     """
-    return df.groupby('Technologia_Pojedyncza').agg(
-        Liczba_Ofert=('ID', 'count'),
-        Mediana_Zarobkow=('Srednia_Kwota', lambda x: x.dropna().median() if x.notna().any() else None),
-        Sredni_Czas_Zatrudnienia=('Czas_Na_Rynku_Dni', 'mean'),
-        Procent_Ofert_Z_Widelkami=('Ma_Realne_Wynagrodzenie', lambda x: (x.sum() / len(x) * 100).round(1))
-    ).reset_index()
+    return (
+        df.groupby("Technologia_Pojedyncza")
+        .agg(
+            Liczba_Ofert=("ID", "count"),
+            Mediana_Zarobkow=(
+                "Srednia_Kwota",
+                lambda x: x.dropna().median() if x.notna().any() else None,
+            ),
+            Sredni_Czas_Zatrudnienia=("Czas_Na_Rynku_Dni", "mean"),
+            Procent_Ofert_Z_Widelkami=(
+                "Ma_Realne_Wynagrodzenie",
+                lambda x: (x.sum() / len(x) * 100).round(1),
+            ),
+        )
+        .reset_index()
+    )
 
 
 def _calculate_market_time(df: pd.DataFrame) -> pd.DataFrame:
@@ -169,11 +201,11 @@ def _calculate_market_time(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: DataFrame augmented with a 'Czas_Na_Rynku_Dni' column.
     """
-    df['Utworzono'] = pd.to_datetime(df['Utworzono'], utc=True)
-    df['Scraped At'] = pd.to_datetime(df['Scraped At'], utc=True)
+    df["Utworzono"] = pd.to_datetime(df["Utworzono"], utc=True)
+    df["Scraped At"] = pd.to_datetime(df["Scraped At"], utc=True)
 
     # Calculate timedelta in days (missing dates will yield NaN)
-    df['Czas_Na_Rynku_Dni'] = (df['Scraped At'] - df['Utworzono']).dt.days
+    df["Czas_Na_Rynku_Dni"] = (df["Scraped At"] - df["Utworzono"]).dt.days
 
     return df
 
@@ -191,44 +223,56 @@ def _calculate_salary_transparency_percent(salary_series: pd.Series) -> float:
     return ((salary_series.notna().sum() / len(salary_series)) * 100).round(1)
 
 
-def _prepare_salary_data(df: pd.DataFrame) -> pd.DataFrame:
+# Maps a user-facing employment-type label to the DataFrame columns holding its
+# salary range. "Stawka godzinowa" intentionally pools hourly rates regardless of
+# the underlying contract form (B2B-hourly, zlecenie, ...).
+SALARY_TYPE_COLUMNS: dict[str, tuple[str, str]] = {
+    "UoP (brutto)": ("Wynagrodzenie UoP Od", "Wynagrodzenie UoP Do"),
+    "B2B (netto)": ("Wynagrodzenie B2B Od", "Wynagrodzenie B2B Do"),
+    "Stawka godzinowa": ("Wynagrodzenie Godzinowe Od", "Wynagrodzenie Godzinowe Do"),
+}
+DEFAULT_SALARY_TYPE = "UoP (brutto)"
+
+
+def _prepare_salary_data(
+    df: pd.DataFrame, typ_wynagrodzenia: str = DEFAULT_SALARY_TYPE
+) -> pd.DataFrame:
     """
     Prepare salary data for analysis (without median imputation).
 
-    Process steps:
-    1. Fill missing currencies with "PLN".
-    2. Cast salary columns to numeric types.
-    3. Standardize hourly rates (<1000) to monthly salaries.
-    4. Calculate the average salary only for postings with complete bounds.
+    Resolves the generic "Wynagrodzenie Od"/"Wynagrodzenie Do" columns from the
+    type-specific columns matching `typ_wynagrodzenia` (UoP/B2B/hourly), so every
+    downstream consumer compares like with like instead of mixing gross UoP,
+    net B2B, and hourly figures together.
 
     Args:
         df (pd.DataFrame): DataFrame containing job postings.
+        typ_wynagrodzenia (str): One of the keys in `SALARY_TYPE_COLUMNS`.
 
     Returns:
         pd.DataFrame: DataFrame with sanitized salary data and tracking flags.
     """
     # Fill missing currency with "PLN" if the column exists
-    if 'Waluta' in df.columns:
-        df['Waluta'] = df['Waluta'].fillna("PLN")
+    if "Waluta" in df.columns:
+        df["Waluta"] = df["Waluta"].fillna("PLN")
+
+    od_col, do_col = SALARY_TYPE_COLUMNS[typ_wynagrodzenia]
 
     # Convert to numeric, coercing unparseable strings to NaN
-    df['Wynagrodzenie Od'] = pd.to_numeric(df['Wynagrodzenie Od'], errors='coerce')
-    df['Wynagrodzenie Do'] = pd.to_numeric(df['Wynagrodzenie Do'], errors='coerce')
-
-    # Convert outliers (assumed to be hourly rates) to a standard monthly salary
-    df.loc[df["Wynagrodzenie Od"] < 1000, "Wynagrodzenie Od"] *= 168
-    df.loc[df["Wynagrodzenie Do"] < 1000, "Wynagrodzenie Do"] *= 168
+    df["Wynagrodzenie Od"] = pd.to_numeric(df[od_col], errors="coerce")
+    df["Wynagrodzenie Do"] = pd.to_numeric(df[do_col], errors="coerce")
 
     # Track rows that have real, explicitly stated salary boundaries
-    df['Ma_Realne_Wynagrodzenie'] = (
-        df['Wynagrodzenie Od'].notna() & df['Wynagrodzenie Do'].notna()
-    )
+    df["Ma_Realne_Wynagrodzenie"] = df["Wynagrodzenie Od"].notna() & df["Wynagrodzenie Do"].notna()
 
     # Calculate the median/average salary exclusively for valid salary rows
-    df['Srednia_Kwota'] = df.apply(
-        lambda row: (row['Wynagrodzenie Od'] + row['Wynagrodzenie Do']) / 2
-        if row['Ma_Realne_Wynagrodzenie'] else None,
-        axis=1
+    df["Srednia_Kwota"] = df.apply(
+        lambda row: (
+            (row["Wynagrodzenie Od"] + row["Wynagrodzenie Do"]) / 2
+            if row["Ma_Realne_Wynagrodzenie"]
+            else None
+        ),
+        axis=1,
     )
 
     return df
@@ -244,30 +288,46 @@ def _deduplicate_jobs(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Deduplicated DataFrame.
     """
-    df['Firma_Znormalizowana'] = df['Firma'].apply(__normalize_company_name)
+    df["Firma_Znormalizowana"] = df["Firma"].apply(__normalize_company_name)
 
     df = df.drop_duplicates(
-        subset=['Firma_Znormalizowana', 'Stanowisko', 'Technologie', 'Wynagrodzenie Od', 'Wynagrodzenie Do'],
-        keep='first'
+        subset=[
+            "Firma_Znormalizowana",
+            "Stanowisko",
+            "Technologie",
+            "Wynagrodzenie UoP Od",
+            "Wynagrodzenie UoP Do",
+            "Wynagrodzenie B2B Od",
+            "Wynagrodzenie B2B Do",
+            "Wynagrodzenie Godzinowe Od",
+            "Wynagrodzenie Godzinowe Do",
+        ],
+        keep="first",
     )
 
     # Drop the temporary normalization column to keep the DataFrame clean
-    return df.drop(columns=['Firma_Znormalizowana'])
+    return df.drop(columns=["Firma_Znormalizowana"])
 
 
 def _optimize_memory(df: pd.DataFrame) -> pd.DataFrame:
     """Converts data types to drastically reduce RAM usage."""
     # Replace columns with duplicate values with 'category'
-    categorical_cols = ['poziom', 'waluta', 'kategoria', 'source']
+    categorical_cols = ["poziom", "waluta", "kategoria", "source"]
     for col in categorical_cols:
         if col in df.columns:
-            df[col] = df[col].astype('category')
+            df[col] = df[col].astype("category")
 
     # Converting float64 to float32 (saves 50% of memory for numbers)
-    if 'wynagrodzenie_od' in df.columns:
-        df['wynagrodzenie_od'] = pd.to_numeric(df['wynagrodzenie_od'], downcast='float')
-    if 'wynagrodzenie_do' in df.columns:
-        df['wynagrodzenie_do'] = pd.to_numeric(df['wynagrodzenie_do'], downcast='float')
+    for col in [
+        "wynagrodzenie_uop_od",
+        "wynagrodzenie_uop_do",
+        "wynagrodzenie_b2b_od",
+        "wynagrodzenie_b2b_do",
+        "wynagrodzenie_godzinowe_od",
+        "wynagrodzenie_godzinowe_do",
+    ]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], downcast="float")
 
     return df
 
@@ -284,43 +344,103 @@ class DatabaseHandler:
     MIN_SALARY_TRANSPARENCY_PERCENT: float = 10.0
 
     # Generic tags that do not represent specific IT technologies, used for filtering
-    GENERIC_TECHNOLOGY_TAGS: frozenset[str] = frozenset([
-        # Missing data
-        'brak danych',
-
-        # Working modes and conditions
-        'gotowość do pracy zmianowej', 'praca zdalna', 'praca hybrydowa',
-        'praca stacjonarna', 'elastyczne godziny pracy',
-
-        # Foreign languages and soft skills
-        'english', 'angielski', 'french', 'communication', 'team player',
-        'negotiations skills', 'communication skills', 'analytical thinking',
-        'analytical skills', 'problem solving', 'tech-savvy', 'zaangażowanie',
-        'zdolności analityczne', 'ai interest',
-
-        # Tools and methodologies (considered generic for this algorithm)
-        'agile', 'scrum', 'git', 'jira', 'confluence', 'devops', 'docker',
-        'kubernetes', 'ci/cd', 'itil', 'project management', 'agile project management',
-
-        # Office and non-technical skills
-        'accounting', 'financial accounting', 'excel', 'ms excel', 'ms office',
-        'office 365', 'microsoft office', 'powerpoint', 'ms project', 'rysunek techniczny',
-
-        # Other domains and business roles
-        'recruitment', 'tutoring', 'business analysis', 'business development',
-        'customer support', 'helpdesk', 'customer experience (cx)', 'finance',
-        'finanse', 'procurement', 'supply chain', 'ilustracja', 'grafika', 'pmo',
-
-        # Broad IT buzzwords
-        'pc hardware skills', 'znajomość systemów it', 'data visualization',
-        'cloud computing', 'cloud', 'it support', 'it', 'it basics', 'security',
-        'cybersecurity', 'programming', 'bazy danych', 'networking', 'network',
-        'data', 'hardware', 'os', 'algorithms', 'math', 'matematyka',
-
-        # Testing and engineering concepts (too generic)
-        'skalowalny kod', 'software testing concept', 'testing theory', 'testing',
-        'manual testing', 'qa', 'automated testing', 'engineering principles', 'database design'
-    ])
+    GENERIC_TECHNOLOGY_TAGS: frozenset[str] = frozenset(
+        [
+            # Missing data
+            "brak danych",
+            # Working modes and conditions
+            "gotowość do pracy zmianowej",
+            "praca zdalna",
+            "praca hybrydowa",
+            "praca stacjonarna",
+            "elastyczne godziny pracy",
+            # Foreign languages and soft skills
+            "english",
+            "angielski",
+            "french",
+            "communication",
+            "team player",
+            "negotiations skills",
+            "communication skills",
+            "analytical thinking",
+            "analytical skills",
+            "problem solving",
+            "tech-savvy",
+            "zaangażowanie",
+            "zdolności analityczne",
+            "ai interest",
+            # Tools and methodologies (considered generic for this algorithm)
+            "agile",
+            "scrum",
+            "git",
+            "jira",
+            "confluence",
+            "devops",
+            "docker",
+            "kubernetes",
+            "ci/cd",
+            "itil",
+            "project management",
+            "agile project management",
+            # Office and non-technical skills
+            "accounting",
+            "financial accounting",
+            "excel",
+            "ms excel",
+            "ms office",
+            "office 365",
+            "microsoft office",
+            "powerpoint",
+            "ms project",
+            "rysunek techniczny",
+            # Other domains and business roles
+            "recruitment",
+            "tutoring",
+            "business analysis",
+            "business development",
+            "customer support",
+            "helpdesk",
+            "customer experience (cx)",
+            "finance",
+            "finanse",
+            "procurement",
+            "supply chain",
+            "ilustracja",
+            "grafika",
+            "pmo",
+            # Broad IT buzzwords
+            "pc hardware skills",
+            "znajomość systemów it",
+            "data visualization",
+            "cloud computing",
+            "cloud",
+            "it support",
+            "it",
+            "it basics",
+            "security",
+            "cybersecurity",
+            "programming",
+            "bazy danych",
+            "networking",
+            "network",
+            "data",
+            "hardware",
+            "os",
+            "algorithms",
+            "math",
+            "matematyka",
+            # Testing and engineering concepts (too generic)
+            "skalowalny kod",
+            "software testing concept",
+            "testing theory",
+            "testing",
+            "manual testing",
+            "qa",
+            "automated testing",
+            "engineering principles",
+            "database design",
+        ]
+    )
 
     def __init__(self, database_url: str = Settings.DATABASE_URL) -> None:
         """
@@ -336,7 +456,7 @@ class DatabaseHandler:
         """Create all database tables defined by SQLAlchemy models if they do not exist."""
         Base.metadata.create_all(self.engine)
 
-    def save_jobs(self, jobs_data: List[dict[str, Any]]) -> int:
+    def save_jobs(self, jobs_data: list[dict[str, Any]]) -> int:
         """
         Save or update job postings in the database.
 
@@ -356,20 +476,36 @@ class DatabaseHandler:
         try:
             for job in jobs_data:
                 job_posting = JobPosting(
-                    id=job['ID'],
-                    stanowisko=job['Stanowisko'],
-                    firma=job['Firma'],
-                    poziom=job['Poziom'],
-                    kategoria=job['Kategoria'],
-                    technologie=job['Technologie'],
-                    lokalizacja=job['Lokalizacja'],
-                    wynagrodzenie_od=job['Wynagrodzenie Od'] if job['Wynagrodzenie Od'] else None, # type: ignore
-                    wynagrodzenie_do=job['Wynagrodzenie Do'] if job['Wynagrodzenie Do'] else None, # type: ignore
-                    waluta=job['Waluta'],
-                    utworzono=job['Utworzono'],
-                    zaktualizowano=job['Zaktualizowano'],
-                    data_pobrania=datetime.now(timezone.utc),
-                    source=job['Source'].strip().upper() if job.get('Source') else None
+                    id=job["ID"],
+                    stanowisko=job["Stanowisko"],
+                    firma=job["Firma"],
+                    poziom=job["Poziom"],
+                    kategoria=job["Kategoria"],
+                    technologie=job["Technologie"],
+                    lokalizacja=job["Lokalizacja"],
+                    wynagrodzenie_uop_od=job["Wynagrodzenie UoP Od"]
+                    if job["Wynagrodzenie UoP Od"]
+                    else None,  # type: ignore
+                    wynagrodzenie_uop_do=job["Wynagrodzenie UoP Do"]
+                    if job["Wynagrodzenie UoP Do"]
+                    else None,  # type: ignore
+                    wynagrodzenie_b2b_od=job["Wynagrodzenie B2B Od"]
+                    if job["Wynagrodzenie B2B Od"]
+                    else None,  # type: ignore
+                    wynagrodzenie_b2b_do=job["Wynagrodzenie B2B Do"]
+                    if job["Wynagrodzenie B2B Do"]
+                    else None,  # type: ignore
+                    wynagrodzenie_godzinowe_od=job["Wynagrodzenie Godzinowe Od"]
+                    if job["Wynagrodzenie Godzinowe Od"]
+                    else None,  # type: ignore
+                    wynagrodzenie_godzinowe_do=job["Wynagrodzenie Godzinowe Do"]
+                    if job["Wynagrodzenie Godzinowe Do"]
+                    else None,  # type: ignore
+                    waluta=job["Waluta"],
+                    utworzono=job["Utworzono"],
+                    zaktualizowano=job["Zaktualizowano"],
+                    data_pobrania=datetime.now(UTC),
+                    source=job["Source"].strip().upper() if job.get("Source") else None,
                 )
                 session.merge(job_posting)
             session.commit()
@@ -427,21 +563,25 @@ class DatabaseHandler:
         df = pd.read_sql(query, con=self.engine)
 
         rename_mapping = {
-            'id': 'ID',
-            'stanowisko': 'Stanowisko',
-            'firma': 'Firma',
-            'poziom': 'Poziom',
-            'kategoria': 'Kategoria',
-            'technologie': 'Technologie',
-            'lokalizacja': 'Lokalizacja',
-            'wynagrodzenie_od': 'Wynagrodzenie Od',
-            'wynagrodzenie_do': 'Wynagrodzenie Do',
-            'waluta': 'Waluta',
-            'utworzono': 'Utworzono',
-            'zaktualizowano': 'Zaktualizowano',
-            'scraped_at': 'Scraped At',
-            'data_pobrania': 'Data Pobrania',
-            'source': 'Source'
+            "id": "ID",
+            "stanowisko": "Stanowisko",
+            "firma": "Firma",
+            "poziom": "Poziom",
+            "kategoria": "Kategoria",
+            "technologie": "Technologie",
+            "lokalizacja": "Lokalizacja",
+            "wynagrodzenie_uop_od": "Wynagrodzenie UoP Od",
+            "wynagrodzenie_uop_do": "Wynagrodzenie UoP Do",
+            "wynagrodzenie_b2b_od": "Wynagrodzenie B2B Od",
+            "wynagrodzenie_b2b_do": "Wynagrodzenie B2B Do",
+            "wynagrodzenie_godzinowe_od": "Wynagrodzenie Godzinowe Od",
+            "wynagrodzenie_godzinowe_do": "Wynagrodzenie Godzinowe Do",
+            "waluta": "Waluta",
+            "utworzono": "Utworzono",
+            "zaktualizowano": "Zaktualizowano",
+            "scraped_at": "Scraped At",
+            "data_pobrania": "Data Pobrania",
+            "source": "Source",
         }
 
         # Rename database columns
@@ -450,13 +590,22 @@ class DatabaseHandler:
         return df
 
     @staticmethod
-    @st.cache_data(ttl=3600, max_entries=1)  # ttl=3600 refreshes the cache every hour
-    def get_cached_market_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    @st.cache_data(
+        ttl=3600, max_entries=len(SALARY_TYPE_COLUMNS)
+    )  # ttl=3600 refreshes the cache every hour
+    def get_cached_market_data(
+        typ_wynagrodzenia: str = DEFAULT_SALARY_TYPE,
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
         Fetch, process, and cache complete market data analysis pipelines.
 
         Executes deduplication, salary preparation, market time calculation,
         and niche aggregation.
+
+        Args:
+            typ_wynagrodzenia (str): Which salary type to analyze -- one of the
+                keys in `SALARY_TYPE_COLUMNS` (UoP/B2B/hourly). Cached separately
+                per type.
 
         Returns:
             Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -471,7 +620,7 @@ class DatabaseHandler:
 
         df_raw = pd.DataFrame(raw_jobs)
         df_raw = _deduplicate_jobs(df_raw)
-        df_raw = _prepare_salary_data(df_raw)
+        df_raw = _prepare_salary_data(df_raw, typ_wynagrodzenia)
         df_raw = _calculate_market_time(df_raw)
         df_exploded = db._explode_technologies(df_raw.copy())
         niche_analysis = _aggregate_niche_metrics(df_exploded)
@@ -494,22 +643,26 @@ class DatabaseHandler:
         Returns:
             pd.DataFrame: A normalized DataFrame with one technology per row.
         """
-        df_tech = df.dropna(subset=['Technologie']).copy()
+        df_tech = df.dropna(subset=["Technologie"]).copy()
 
         # Split string representations into Python lists
-        df_tech['Technologia_Pojedyncza'] = df_tech['Technologie'].astype(str).str.split(',')
+        df_tech["Technologia_Pojedyncza"] = df_tech["Technologie"].astype(str).str.split(",")
 
         # Flatten the dataset based on the generated lists
-        df_exploded = df_tech.explode('Technologia_Pojedyncza')
+        df_exploded = df_tech.explode("Technologia_Pojedyncza")
 
         # Standardize formatting
-        df_exploded['Technologia_Pojedyncza'] = df_exploded['Technologia_Pojedyncza'].str.strip().str.lower()
+        df_exploded["Technologia_Pojedyncza"] = (
+            df_exploded["Technologia_Pojedyncza"].str.strip().str.lower()
+        )
 
         # Exclude edge cases indicating missing data
-        df_exploded = df_exploded[df_exploded['Technologia_Pojedyncza'] != "brak danych"]
+        df_exploded = df_exploded[df_exploded["Technologia_Pojedyncza"] != "brak danych"]
 
         # Drop non-technical tags defined in the class constant
-        df_exploded = df_exploded[~df_exploded['Technologia_Pojedyncza'].isin(self.GENERIC_TECHNOLOGY_TAGS)]
+        df_exploded = df_exploded[
+            ~df_exploded["Technologia_Pojedyncza"].isin(self.GENERIC_TECHNOLOGY_TAGS)
+        ]
 
         return df_exploded
 
@@ -526,21 +679,28 @@ class DatabaseHandler:
             pd.DataFrame: Filtered DataFrame sorted by profitability and data transparency.
         """
         return df[
-            (df['Liczba_Ofert'] >= min_jobs) &
-            (df['Liczba_Ofert'] <= max_jobs) &
-            (df['Procent_Ofert_Z_Widelkami'] >= self.MIN_SALARY_TRANSPARENCY_PERCENT)
+            (df["Liczba_Ofert"] >= min_jobs)
+            & (df["Liczba_Ofert"] <= max_jobs)
+            & (df["Procent_Ofert_Z_Widelkami"] >= self.MIN_SALARY_TRANSPARENCY_PERCENT)
         ].sort_values(
-            by=['Mediana_Zarobkow', 'Procent_Ofert_Z_Widelkami', 'Sredni_Czas_Zatrudnienia'],
-            ascending=[False, False, True]
+            by=["Mediana_Zarobkow", "Procent_Ofert_Z_Widelkami", "Sredni_Czas_Zatrudnienia"],
+            ascending=[False, False, True],
         )
 
-    def get_blue_ocean_niches(self, min_jobs: int = 15, max_jobs: int = 70) -> pd.DataFrame:
+    def get_blue_ocean_niches(
+        self,
+        min_jobs: int = 15,
+        max_jobs: int = 70,
+        typ_wynagrodzenia: str = DEFAULT_SALARY_TYPE,
+    ) -> pd.DataFrame:
         """
         Fetch database records and execute the complete 'Blue Ocean' niche discovery pipeline.
 
         Args:
             min_jobs (int): Minimum number of job offers to be considered a viable niche.
             max_jobs (int): Maximum number of job offers to avoid saturated 'Red Oceans'.
+            typ_wynagrodzenia (str): Which salary type to analyze -- one of the
+                keys in `SALARY_TYPE_COLUMNS` (UoP/B2B/hourly).
 
         Returns:
             pd.DataFrame: Summarized metrics of potential niches, containing:
@@ -558,10 +718,9 @@ class DatabaseHandler:
         # Route the raw dictionary list through the data transformation pipeline
         df = pd.DataFrame(jobs_data)
         df = _deduplicate_jobs(df)
-        df = _prepare_salary_data(df)
+        df = _prepare_salary_data(df, typ_wynagrodzenia)
         df = _calculate_market_time(df)
         df_exploded = self._explode_technologies(df)
         niche_analysis = _aggregate_niche_metrics(df_exploded)
 
         return self._filter_viable_niches(niche_analysis, min_jobs, max_jobs)
-

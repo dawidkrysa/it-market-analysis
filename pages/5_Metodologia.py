@@ -6,11 +6,13 @@ It provides functionalities to fetch job offers via web scraping from
 portals like JustJoin.it, view raw records, and clear the database.
 """
 
-import streamlit as st
+import time
+
 import pandas as pd
+import streamlit as st
+
 from scrapers.scraper_manager import ScraperManager
 from utils.db_handler import DatabaseHandler
-import time
 
 st.set_page_config(page_title="Zarządzanie Danymi", page_icon="⚙️", layout="wide")
 
@@ -19,6 +21,7 @@ st.markdown("""
 Ta sekcja to centrum dowodzenia silnika danych aplikacji **Radar Mikro-Nisz**. 
 Pozwala na ręczne uruchamianie procesu web scrapingu, monitorowanie stanu bazy oraz podgląd surowych rekordów z rynkowych portali pracy.
 """)
+
 
 # --- Database Initialization ---
 @st.cache_resource
@@ -35,12 +38,14 @@ def get_db_handler() -> DatabaseHandler:
     handler.create_tables()
     return handler
 
+
 try:
     db_handler = get_db_handler()
     record_count = db_handler.get_record_count()
 except Exception as e:
     st.error(f"❌ Nie można połączyć się z bazą danych: {e}")
     st.stop()
+
 
 # --- Helper Function: Native Streamlit Modal Dialog ---
 @st.dialog("⚠️ Potwierdzenie czyszczenia bazy")
@@ -66,6 +71,7 @@ def confirm_clear_database() -> None:
     if col2.button("Anuluj", width="stretch"):
         st.rerun()
 
+
 # --- Display Global Success Messages ---
 if "action_msg" in st.session_state:
     st.success(st.session_state.action_msg)
@@ -73,12 +79,9 @@ if "action_msg" in st.session_state:
 
 
 # --- Tabs ---
-tab_status, tab_fetch, tab_view, tab_clear = st.tabs([
-    "📊 Status bazy",
-    "⬇️ Pobieranie danych",
-    "📋 Przeglądarka danych",
-    "🗑️ Czyszczenie bazy"
-])
+tab_status, tab_fetch, tab_view, tab_clear = st.tabs(
+    ["📊 Status bazy", "⬇️ Pobieranie danych", "📋 Przeglądarka danych", "🗑️ Czyszczenie bazy"]
+)
 
 # ==========================================
 # TAB 1: Database Status
@@ -87,7 +90,7 @@ with tab_status:
     st.subheader("Aktualny stan bazy danych")
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Liczba zebranych ofert", f"{record_count:,}".replace(',', ' '))
+    col1.metric("Liczba zebranych ofert", f"{record_count:,}".replace(",", " "))
     col2.metric("Status Bazy", "🟢 Aktywna" if record_count > 0 else "🔴 Pusta")
     col3.metric("Ostatnia aktualizacja", "Dziś" if record_count > 0 else "Brak")
 
@@ -98,7 +101,15 @@ with tab_status:
             df = pd.DataFrame(db_handler.get_all_jobs())
             if not df.empty:
                 # Extract and count the most frequently occurring technologies
-                tech_counts = df['Technologie'].dropna().str.split(',').explode().str.strip().value_counts().head(15)
+                tech_counts = (
+                    df["Technologie"]
+                    .dropna()
+                    .str.split(",")
+                    .explode()
+                    .str.strip()
+                    .value_counts()
+                    .head(15)
+                )
                 st.bar_chart(tech_counts, color="#4e79a7")
         except Exception as e:
             st.error(f"Błąd generowania podsumowania: {e}")
@@ -108,26 +119,46 @@ with tab_status:
 # ==========================================
 with tab_fetch:
     st.subheader("Uruchom Web Scraper")
-    st.markdown("Moduł pobiera najnowsze oferty pracy (poziom Junior) z połączonych portali ogłoszeniowych.")
+    st.markdown(
+        "Moduł pobiera najnowsze oferty pracy z połączonych portali ogłoszeniowych, "
+        "dla wybranych poziomów doświadczenia."
+    )
 
-    if st.button("🚀 Rozpocznij Scraping Danych", type="primary"):
+    level_labels = {
+        "Trainee": "trainee",
+        "Junior": "junior",
+        "Mid": "mid",
+        "Senior": "senior",
+    }
+    selected_labels = st.multiselect(
+        "Poziomy doświadczenia do pobrania:",
+        options=list(level_labels.keys()),
+        default=["Junior", "Mid", "Senior"],
+    )
+
+    if st.button("🚀 Rozpocznij Scraping Danych", type="primary", disabled=not selected_labels):
         progress_bar = st.progress(0, text="Inicjalizacja scraperów...")
         status_box = st.info("Uruchamianie silnika...")
 
         try:
             manager = ScraperManager()
+            experience_levels = ",".join(level_labels[label] for label in selected_labels)
 
             # Simulated progress feedback
             progress_bar.progress(25, text="Nawiązywanie połączeń z portalami...")
-            time.sleep(1) # Visual pause
+            time.sleep(1)  # Visual pause
 
-            progress_bar.progress(50, text="Pobieranie i parsowanie ofert. To może potrwać kilka minut...")
-            all_jobs = manager.run_all(experience_level="junior")
+            progress_bar.progress(
+                50, text="Pobieranie i parsowanie ofert. To może potrwać kilka minut..."
+            )
+            all_jobs = manager.run_all(experience_levels=experience_levels)
 
             progress_bar.progress(85, text="Zapisywanie do lokalnej bazy danych...")
             if all_jobs:
                 saved_count = db_handler.save_jobs(all_jobs)
-                st.session_state.action_msg = f"✅ Sukces! Pomyślnie zeskrapowano i zapisano {saved_count} nowych ofert."
+                st.session_state.action_msg = (
+                    f"✅ Sukces! Pomyślnie zeskrapowano i zapisano {saved_count} nowych ofert."
+                )
             else:
                 st.session_state.action_msg = "⚠️ Scraper zakończył pracę, ale nie znalazł nowych ofert pasujących do kryteriów."
 
@@ -148,6 +179,7 @@ with tab_view:
     if record_count == 0:
         st.info("Baza danych jest pusta. Uruchom scraper w zakładce 'Pobieranie danych'.")
     else:
+
         @st.cache_data(ttl=60)
         def load_df() -> pd.DataFrame:
             """
@@ -165,21 +197,27 @@ with tab_view:
         # Column filters
         col1, col2 = st.columns(2)
         with col1:
-            levels = ["Wszystkie"] + list(df['Poziom'].dropna().unique())
+            levels = ["Wszystkie"] + list(df["Poziom"].dropna().unique())
             level_filter = st.selectbox("Filtruj po poziomie (Seniority):", levels)
 
         with col2:
-            all_techs = sorted(set(df['Technologie'].dropna().str.split(',').explode().str.strip()))
-            tech_filter = st.multiselect("Wymagane technologie (AND):", all_techs, help="Pokaże tylko oferty zawierające wybrane technologie.")
+            all_techs = sorted(set(df["Technologie"].dropna().str.split(",").explode().str.strip()))
+            tech_filter = st.multiselect(
+                "Wymagane technologie (AND):",
+                all_techs,
+                help="Pokaże tylko oferty zawierające wybrane technologie.",
+            )
 
         # Apply filters
         filtered_df = df.copy()
         if level_filter != "Wszystkie":
-            filtered_df = filtered_df[filtered_df['Poziom'] == level_filter]
+            filtered_df = filtered_df[filtered_df["Poziom"] == level_filter]
 
         if tech_filter:
             for tech in tech_filter:
-                filtered_df = filtered_df[filtered_df['Technologie'].str.contains(tech, case=False, na=False)]
+                filtered_df = filtered_df[
+                    filtered_df["Technologie"].str.contains(tech, case=False, na=False)
+                ]
 
         # Render dataframe
         st.caption(f"Pokazano {len(filtered_df):,} z {record_count:,} całkowitych ofert w bazie.")
