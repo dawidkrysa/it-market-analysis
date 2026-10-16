@@ -91,18 +91,16 @@ def load_market_data(typ_wynagrodzenia: str) -> pd.DataFrame:
 
 
 @st.cache_data
-def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_data() -> pd.DataFrame:
     """
-    Load bootcamp and living costs data from the database.
+    Load bootcamp data from the database.
 
     Returns:
-        Tuple[pd.DataFrame, pd.DataFrame]: A tuple containing the bootcamp data
-        and living costs data DataFrames. If database tables are missing,
-        empty DataFrames with predefined schemas are returned.
+        pd.DataFrame: Bootcamp cost/duration data. If the database table is
+        missing, an empty DataFrame with the expected schema is returned.
     """
     db = DatabaseHandler()
 
-    # 1. Fetch bootcamp data from the database
     try:
         df_bootcamp = pd.read_sql_table("bootcamp_data", con=db.engine)
     except ValueError:
@@ -130,36 +128,10 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
             ]
         )
 
-    # 2. Fetch living costs data from the database
-    try:
-        df_koszty = pd.read_sql_table("living_costs_data", con=db.engine)
-    except ValueError:
-        st.warning(
-            "Nie znaleziono tabeli 'living_costs_data' w bazie danych. Proszę uruchomić notatnik ładujący dane."
-        )
-        df_koszty = pd.DataFrame(
-            columns=[
-                "Województwo",
-                "Miasto",
-                "Średni koszt życia / utrzymania",
-                "Średni czas szukania pracy (dn)",
-            ]
-        )
-    except Exception as e:
-        st.error(f"Błąd podczas czytania danych kosztów życia z bazy: {e}")
-        df_koszty = pd.DataFrame(
-            columns=[
-                "Województwo",
-                "Miasto",
-                "Średni koszt życia / utrzymania",
-                "Średni czas szukania pracy (dn)",
-            ]
-        )
-
-    return df_bootcamp, df_koszty
+    return df_bootcamp
 
 
-df_bootcamp, df_koszty = load_data()
+df_bootcamp = load_data()
 
 # --- Visual Layout ---
 
@@ -177,22 +149,16 @@ df_market = load_market_data(typ_wynagrodzenia)
 st.divider()
 
 # Create an expander section for editable data tables at the bottom
-tables_expander = st.expander("📋 Edytuj dane źródłowe (Koszty życia i Bootcampy)")
+tables_expander = st.expander("📋 Edytuj dane źródłowe (Bootcampy)")
 
 with tables_expander:
-    # Render interactive data editors
-    st.header("1. Dane Bootcampów (Edytowalne)")
+    # Render interactive data editor
+    st.header("Dane Bootcampów (Edytowalne)")
     st.caption(
         "Kliknij dwukrotnie komórkę, aby zmienić jej wartość. Zmiany zaktualizują obliczenia w czasie rzeczywistym."
     )
     edited_df_bootcamp = st.data_editor(
         df_bootcamp, num_rows="dynamic", width="stretch", key="bootcamp_editor"
-    )
-
-    st.header("2. Koszty życia w miastach wojewódzkich (Edytowalne)")
-    st.caption("Kliknij dwukrotnie komórkę, aby zmienić jej wartość.")
-    edited_df_koszty = st.data_editor(
-        df_koszty, num_rows="dynamic", width="stretch", key="koszty_editor"
     )
 
 # --- Calculator Engine (Rendered in the top container) ---
@@ -216,8 +182,17 @@ with calc_container:
             "Czas zatrudnienia i zarabiania (w miesiącach):", min_value=0.0, value=12.0, step=1.0
         )
 
-        cities = [] if edited_df_koszty.empty else edited_df_koszty["Miasto"].unique()
-        wybrane_miasto = st.selectbox("Wybierz miasto (Koszty życia):", cities)
+        koszt_zycia_msc = st.number_input(
+            "Twój miesięczny koszt życia (PLN):",
+            min_value=0.0,
+            value=3000.0,
+            step=100.0,
+            key="koszt_zycia_msc_input",
+            help=(
+                "Wpisz swój własny, indywidualny koszt utrzymania zamiast szacunku dla miasta "
+                "- wartość zostaje zapamiętana do końca tej sesji przeglądarki."
+            ),
+        )
 
     # Suggest expected earnings based on market data median
     sugerowane_zarobki = 6000.0
@@ -241,11 +216,7 @@ with calc_container:
 
     # Retrieve and clean selected data values
     try:
-        if wybrana_technologia and wybrane_miasto:
-            # Retrieve living costs
-            wiersz_miasto = edited_df_koszty[edited_df_koszty["Miasto"] == wybrane_miasto].iloc[0]
-            koszt_zycia_msc = clean_currency(wiersz_miasto["Średni koszt życia / utrzymania"])
-
+        if wybrana_technologia:
             # Retrieve bootcamp education costs and duration
             wiersz_bootcamp = edited_df_bootcamp[
                 edited_df_bootcamp["Technologia"] == wybrana_technologia
@@ -322,6 +293,6 @@ with calc_container:
 
     except Exception as e:
         st.warning(
-            "Upewnij się, że tabele zawierają poprawne wartości dla wybranego miasta i technologii."
+            "Upewnij się, że tabela bootcampów zawiera poprawne wartości dla wybranej technologii."
         )
         st.error(f"Szczegóły błędu: {e}")
