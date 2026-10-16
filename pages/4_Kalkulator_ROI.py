@@ -6,8 +6,6 @@ to help users evaluate the financial viability of learning specific IT
 technologies via bootcamps based on living costs and expected salaries.
 """
 
-from typing import Any
-
 import pandas as pd
 import streamlit as st
 
@@ -19,53 +17,9 @@ from utils.db_handler import SALARY_TYPE_COLUMNS, DatabaseHandler
 ROI_SALARY_TYPES = [t for t in SALARY_TYPE_COLUMNS if t != "Stawka godzinowa"]
 
 
-# --- Helper Functions for Data Cleaning ---
-
-
-def clean_currency(val: Any) -> float:
-    """
-    Convert raw currency strings to a float value.
-
-    Handles string formats such as '7136,26 PLN' and edge cases like 'No data'.
-
-    Args:
-        val (Any): The raw currency value to be cleaned.
-
-    Returns:
-        float: The cleaned currency value as a float, or 0.0 if the input is invalid.
-    """
-    val_str = str(val).strip()
-    if pd.isna(val) or "Brak" in val_str or val_str == "":
-        return 0.0
-
-    # Remove 'PLN' and spaces, then replace the decimal comma with a dot
-    cleaned = val_str.replace("PLN", "").replace(" ", "").replace(",", ".")
-    try:
-        return float(cleaned)
-    except ValueError:
-        return 0.0
-
-
-def clean_days(val: Any) -> float:
-    """
-    Convert duration strings representing days to a float value.
-
-    Handles missing data and edge cases.
-
-    Args:
-        val (Any): The raw duration value to be cleaned.
-
-    Returns:
-        float: The cleaned duration value as a float, or 0.0 if the input is invalid.
-    """
-    val_str = str(val).strip()
-    if pd.isna(val) or "Brak" in val_str or val_str == "":
-        return 0.0
-
-    try:
-        return float(val_str.replace(",", "."))
-    except ValueError:
-        return 0.0
+def _or_zero(val: float | None) -> float:
+    """Treat a missing/NaN bootcamp figure as 0 so the calculation doesn't break."""
+    return float(val) if pd.notna(val) else 0.0
 
 
 # --- Step 1 & 2: Loading and Preparing Data ---
@@ -90,36 +44,24 @@ def load_market_data(typ_wynagrodzenia: str) -> pd.DataFrame:
     return df_niche
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_data() -> pd.DataFrame:
     """
     Load bootcamp data from the database.
 
     Returns:
-        pd.DataFrame: Bootcamp cost/duration data. If the database table is
-        missing, an empty DataFrame with the expected schema is returned.
+        pd.DataFrame: Bootcamp cost/duration data, managed from the admin
+        panel's "Bootcampy" tab. Empty if none have been added yet.
     """
     db = DatabaseHandler()
-
+    db.create_tables()
     try:
-        df_bootcamp = pd.read_sql_table("bootcamp_data", con=db.engine)
-    except ValueError:
-        st.warning(
-            "Nie znaleziono tabeli 'bootcamp_data' w bazie danych. Proszę uruchomić notatnik ładujący dane."
-        )
-        df_bootcamp = pd.DataFrame(
-            columns=[
-                "Technologia",
-                "Średni Koszt",
-                "Mediana Kosztu",
-                "Średni Czas (dni)",
-                "Mediana Czasu (dni)",
-            ]
-        )
+        return db.get_bootcamps()
     except Exception as e:
         st.error(f"Błąd podczas czytania danych bootcampów z bazy: {e}")
-        df_bootcamp = pd.DataFrame(
+        return pd.DataFrame(
             columns=[
+                "ID",
                 "Technologia",
                 "Średni Koszt",
                 "Mediana Kosztu",
@@ -127,8 +69,6 @@ def load_data() -> pd.DataFrame:
                 "Mediana Czasu (dni)",
             ]
         )
-
-    return df_bootcamp
 
 
 df_bootcamp = load_data()
@@ -148,17 +88,20 @@ df_market = load_market_data(typ_wynagrodzenia)
 
 st.divider()
 
-# Create an expander section for editable data tables at the bottom
-tables_expander = st.expander("📋 Edytuj dane źródłowe (Bootcampy)")
+# Create an expander section for a quick local "what-if" override at the bottom
+tables_expander = st.expander("📋 Podgląd / tymczasowa edycja danych bootcampów")
 
 with tables_expander:
-    # Render interactive data editor
-    st.header("Dane Bootcampów (Edytowalne)")
     st.caption(
-        "Kliknij dwukrotnie komórkę, aby zmienić jej wartość. Zmiany zaktualizują obliczenia w czasie rzeczywistym."
+        "Te zmiany są tylko na potrzeby tej sesji i nie zapisują się do bazy. "
+        "Żeby trwale dodać, zaktualizować lub usunąć bootcamp, użyj zakładki "
+        "'🎓 Bootcampy' w panelu administracyjnym (Silnik Danych)."
     )
     edited_df_bootcamp = st.data_editor(
-        df_bootcamp, num_rows="dynamic", width="stretch", key="bootcamp_editor"
+        df_bootcamp.drop(columns=["ID"], errors="ignore"),
+        num_rows="dynamic",
+        width="stretch",
+        key="bootcamp_editor",
     )
 
 # --- Calculator Engine (Rendered in the top container) ---
@@ -221,8 +164,8 @@ with calc_container:
             wiersz_bootcamp = edited_df_bootcamp[
                 edited_df_bootcamp["Technologia"] == wybrana_technologia
             ].iloc[0]
-            koszt_bootcampu = clean_currency(wiersz_bootcamp["Mediana Kosztu"])
-            czas_edukacji_dni = clean_days(wiersz_bootcamp["Mediana Czasu (dni)"])
+            koszt_bootcampu = _or_zero(wiersz_bootcamp["Mediana Kosztu"])
+            czas_edukacji_dni = _or_zero(wiersz_bootcamp["Mediana Czasu (dni)"])
             czas_edukacji_msc = (
                 czas_edukacji_dni / 30.0
             )  # Convert days to months (assuming 30 days/month)

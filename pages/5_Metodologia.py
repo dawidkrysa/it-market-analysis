@@ -79,8 +79,14 @@ if "action_msg" in st.session_state:
 
 
 # --- Tabs ---
-tab_status, tab_fetch, tab_view, tab_clear = st.tabs(
-    ["📊 Status bazy", "⬇️ Pobieranie danych", "📋 Przeglądarka danych", "🗑️ Czyszczenie bazy"]
+tab_status, tab_fetch, tab_view, tab_bootcamps, tab_clear = st.tabs(
+    [
+        "📊 Status bazy",
+        "⬇️ Pobieranie danych",
+        "📋 Przeglądarka danych",
+        "🎓 Bootcampy",
+        "🗑️ Czyszczenie bazy",
+    ]
 )
 
 # ==========================================
@@ -224,7 +230,73 @@ with tab_view:
         st.dataframe(filtered_df, width="stretch", height=500, hide_index=True)
 
 # ==========================================
-# TAB 4: Clear Database
+# TAB 4: Bootcamp Management
+# ==========================================
+with tab_bootcamps:
+    st.subheader("Katalog Bootcampów")
+    st.markdown(
+        "Dane kosztów i czasu trwania bootcampów używane przez **Kalkulator ROI**. "
+        "Edytuj ręcznie poniżej albo wgraj plik, żeby zastąpić lub uzupełnić katalog."
+    )
+
+    with st.expander("📤 Import z pliku (CSV / XLSX)"):
+        uploaded_file = st.file_uploader(
+            "Plik z kolumnami: Technologia, Średni Koszt, Mediana Kosztu, "
+            "Średni Czas (dni), Mediana Czasu (dni)",
+            type=["csv", "xlsx"],
+        )
+        dolacz_do_istniejacych = st.checkbox(
+            "Dołącz do istniejących danych (zamiast je nadpisać)", value=False
+        )
+
+        if uploaded_file is not None and st.button("Importuj plik"):
+            try:
+                if uploaded_file.name.lower().endswith(".xlsx"):
+                    df_import = pd.read_excel(uploaded_file)
+                else:
+                    df_import = pd.read_csv(uploaded_file)
+
+                missing_cols = {"Technologia"} - set(df_import.columns)
+                if missing_cols:
+                    st.error(f"Brakuje wymaganej kolumny: {', '.join(missing_cols)}")
+                else:
+                    if dolacz_do_istniejacych:
+                        df_import = pd.concat(
+                            [db_handler.get_bootcamps(), df_import], ignore_index=True
+                        )
+                    saved_count = db_handler.save_bootcamps(df_import)
+                    st.session_state.action_msg = (
+                        f"✅ Zaimportowano i zapisano {saved_count} wierszy bootcampów."
+                    )
+                    st.rerun()
+            except Exception as e:
+                st.error(f"❌ Błąd importu pliku: {e}")
+
+    st.markdown("---")
+    st.markdown("### ✏️ Edytuj ręcznie")
+    st.caption(
+        "Kliknij dwukrotnie komórkę, aby zmienić jej wartość. Dodawaj/usuwaj wiersze "
+        "paskiem narzędzi tabeli, a na końcu zapisz zmiany."
+    )
+
+    df_bootcamps_admin = db_handler.get_bootcamps()
+    edited_bootcamps = st.data_editor(
+        df_bootcamps_admin.drop(columns=["ID"], errors="ignore"),
+        num_rows="dynamic",
+        width="stretch",
+        key="bootcamp_admin_editor",
+    )
+
+    if st.button("💾 Zapisz zmiany", type="primary"):
+        try:
+            saved_count = db_handler.save_bootcamps(edited_bootcamps)
+            st.session_state.action_msg = f"✅ Zapisano {saved_count} wierszy bootcampów."
+            st.rerun()
+        except Exception as e:
+            st.error(f"❌ Błąd zapisu: {e}")
+
+# ==========================================
+# TAB 5: Clear Database
 # ==========================================
 with tab_clear:
     st.subheader("Opcje Administracyjne")
