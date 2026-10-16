@@ -12,7 +12,7 @@ from typing import Any
 
 import pandas as pd
 import streamlit as st
-from sqlalchemy import Column, DateTime, Engine, Integer, String, Text, create_engine
+from sqlalchemy import Column, DateTime, Engine, Float, Integer, String, Text, create_engine
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -98,6 +98,29 @@ class JobPosting(Base):
     scraped_at = Column(DateTime, default=datetime.now(UTC))
     data_pobrania = Column(DateTime, default=datetime.now(UTC))
     source = Column(SQLEnum(Source), nullable=True)
+
+
+class Bootcamp(Base):
+    """
+    SQLAlchemy model representing aggregated bootcamp cost/duration stats per technology.
+
+    Attributes:
+        id: Auto-incrementing row identifier.
+        technologia: Technology the bootcamp teaches (e.g. "aws", "java").
+        sredni_koszt: Average bootcamp price (PLN).
+        mediana_kosztu: Median bootcamp price (PLN).
+        sredni_czas_dni: Average bootcamp duration (days).
+        mediana_czasu_dni: Median bootcamp duration (days).
+    """
+
+    __tablename__: str = "bootcamp_data"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    technologia = Column(Text, nullable=False)
+    sredni_koszt = Column(Float, nullable=True)
+    mediana_kosztu = Column(Float, nullable=True)
+    sredni_czas_dni = Column(Float, nullable=True)
+    mediana_czasu_dni = Column(Float, nullable=True)
 
 
 def __normalize_company_name(name: str) -> str:
@@ -332,6 +355,16 @@ def _optimize_memory(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _to_float_or_none(val: Any) -> float | None:
+    """Coerce a data_editor cell value to float, or None if blank/unparseable."""
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
 class DatabaseHandler:
     """
     Handler for database operations related to job postings.
@@ -548,6 +581,70 @@ class DatabaseHandler:
         session: Session = self.Session()
         try:
             return session.query(JobPosting).count()
+        finally:
+            session.close()
+
+    def get_bootcamps(self) -> pd.DataFrame:
+        """
+        Retrieve all bootcamp cost/duration records.
+
+        Returns:
+            pd.DataFrame: Bootcamp data with Polish display column names
+                (including 'ID'), sorted by technology name.
+        """
+        df = pd.read_sql("SELECT * FROM bootcamp_data ORDER BY technologia", con=self.engine)
+        return df.rename(
+            columns={
+                "id": "ID",
+                "technologia": "Technologia",
+                "sredni_koszt": "Średni Koszt",
+                "mediana_kosztu": "Mediana Kosztu",
+                "sredni_czas_dni": "Średni Czas (dni)",
+                "mediana_czasu_dni": "Mediana Czasu (dni)",
+            }
+        )
+
+    def save_bootcamps(self, df: pd.DataFrame) -> int:
+        """
+        Replace all bootcamp records with the given DataFrame (full sync).
+
+        Rows with a blank "Technologia" are skipped. Numeric columns are
+        coerced to float; unparseable or missing values are stored as NULL.
+
+        Args:
+            df (pd.DataFrame): Edited bootcamp data with Polish display column
+                names (as returned by `get_bootcamps`), e.g. from a Streamlit
+                data editor.
+
+        Returns:
+            int: The number of rows saved.
+
+        Raises:
+            Exception: If the database transaction fails.
+        """
+        session: Session = self.Session()
+        try:
+            session.query(Bootcamp).delete()
+            count = 0
+            for _, row in df.iterrows():
+                technologia = str(row.get("Technologia", "")).strip()
+                if not technologia or technologia.lower() == "nan":
+                    continue
+                session.add(
+                    Bootcamp(
+                        technologia=technologia,
+                        sredni_koszt=_to_float_or_none(row.get("Średni Koszt")),
+                        mediana_kosztu=_to_float_or_none(row.get("Mediana Kosztu")),
+                        sredni_czas_dni=_to_float_or_none(row.get("Średni Czas (dni)")),
+                        mediana_czasu_dni=_to_float_or_none(row.get("Mediana Czasu (dni)")),
+                    )
+                )
+                count += 1
+            session.commit()
+            return count
+        except Exception as e:
+            session.rollback()
+            raise e
         finally:
             session.close()
 
