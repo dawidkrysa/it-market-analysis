@@ -200,42 +200,57 @@ with tab_bench:
 with tab_hard:
     st.subheader("Jak trudno będzie zatrudnić?")
     st.caption(
-        "Miarą jest wiek aktywnych ogłoszeń w chwili ostatniego scrapingu (mediana dni od publikacji). "
-        "Ogłoszenia, które długo wiszą, zwykle trudniej obsadzić. To przybliżenie: nie wiemy, kiedy "
-        "ogłoszenie faktycznie zakończyło się zatrudnieniem."
+        "Miarą jest wiek aktywnych ogłoszeń w chwili ostatniego scrapingu. Portale liczą go różnie "
+        "(NoFluffJobs i TheProtocol co ok. 30 dni publikują ogłoszenie na nowo, JustJoinIT trzyma "
+        "pierwotną datę), więc dni nie są porównywalne między portalami. Dlatego główną miarą jest "
+        "**względny wiek**: percentyl wieku ogłoszenia w obrębie jego portalu (50 = typowe "
+        "ogłoszenie, wyżej = wisi dłużej niż większość). To przybliżenie trudności rekrutacji - nie "
+        "wiemy, kiedy ogłoszenie faktycznie zakończyło się zatrudnieniem."
     )
-    age_tech = offers["Czas_Na_Rynku_Dni"].dropna()
-    age_market = market["Czas_Na_Rynku_Dni"].dropna()
+    # Within-portal age percentile, so the portal mix of a technology doesn't bias it.
+    age_pct = (
+        market.dropna(subset=["Czas_Na_Rynku_Dni"])
+        .groupby("Source")["Czas_Na_Rynku_Dni"]
+        .rank(pct=True)
+        .mul(100)
+    )
+    age_pct_by_id = pd.Series(age_pct.values, index=market.loc[age_pct.index, "ID"].values)
+    pct_tech = age_pct.loc[age_pct.index.intersection(offers.index)]
     n_companies = offers["Firma"].nunique()
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric(
-        "Mediana wieku ogłoszeń",
-        f"{age_tech.median():.0f} dni" if not age_tech.empty else "-",
-        delta=(
-            f"{age_tech.median() - age_market.median():+.0f} dni vs rynek"
-            if not age_tech.empty and not age_market.empty
-            else None
-        ),
+        "Względny wiek ogłoszeń",
+        f"{pct_tech.median():.0f} / 100" if not pct_tech.empty else "-",
+        delta=f"{pct_tech.median() - 50:+.0f} vs typowe" if not pct_tech.empty else None,
         delta_color="inverse",
+        help="Mediana percentyla wieku w obrębie portalu; 50 = typowe ogłoszenie.",
     )
-    c2.metric("Firmy szukające tej kompetencji", n_companies)
-    c3.metric(
+    c2.metric(
+        "Mediana wieku (dni)",
+        f"{offers['Czas_Na_Rynku_Dni'].median():.0f}" if not offers.empty else "-",
+        help="Informacyjnie - zależy od miksu portali.",
+    )
+    c3.metric("Firmy szukające tej kompetencji", n_companies)
+    c4.metric(
         "Ofert na firmę",
         f"{len(offers) / n_companies:.1f}" if n_companies else "-",
         help="Ile ogłoszeń średnio publikuje jedna firma - wysoka wartość = intensywny nabór.",
     )
 
-    if len(age_tech) >= RELIABLE_N and len(age_market) >= RELIABLE_N:
-        _, p_age = stats.mannwhitneyu(age_tech, age_market, alternative="two-sided")
+    rest = age_pct.drop(pct_tech.index, errors="ignore")
+    if len(pct_tech) >= RELIABLE_N and len(rest) >= RELIABLE_N:
+        _, p_age = stats.mannwhitneyu(pct_tech, rest, alternative="two-sided")
         verdict = (
-            "istotnie różni się od rynku" if p_age < 0.05 else "nie różni się istotnie od rynku"
+            "istotnie różni się od reszty rynku"
+            if p_age < 0.05
+            else "nie różni się istotnie od reszty rynku"
         )
         st.caption(
-            f"Test Manna-Whitneya: wiek ogłoszeń dla tej kompetencji {verdict} (p = {p_age:.3f})."
+            f"Test Manna-Whitneya na względnym wieku: ta kompetencja {verdict} (p = {p_age:.3f})."
         )
 
-    st.markdown("**Kompetencje, których ogłoszenia wiszą najdłużej**")
+    st.markdown("**Kompetencje, których ogłoszenia wiszą najdłużej (względnie)**")
     min_n_age = st.slider(
         "Minimalna liczba ofert technologii:",
         5,
@@ -245,11 +260,10 @@ with tab_hard:
         key="min_n_age",
         help="Odrzuca rzadkie technologie, których mediana byłaby przypadkowa.",
     )
-    ages = (
-        market_tech.dropna(subset=["Czas_Na_Rynku_Dni"])
-        .groupby("Technologia_Pojedyncza")["Czas_Na_Rynku_Dni"]
-        .agg(n="count", Mediana="median")
+    tech_age = market_tech.assign(Wiek_Pct=market_tech["ID"].map(age_pct_by_id)).dropna(
+        subset=["Wiek_Pct"]
     )
+    ages = tech_age.groupby("Technologia_Pojedyncza")["Wiek_Pct"].agg(n="count", Mediana="median")
     ages = ages[ages["n"] >= min_n_age].sort_values("Mediana", ascending=False).head(20)
     if ages.empty:
         st.info("Brak technologii spełniających próg liczby ofert.")
@@ -266,8 +280,10 @@ with tab_hard:
             color="Wybrana",
             color_discrete_map={"wybrana technologia": "#e15759", "pozostałe": BAR_COLOR},
             hover_data={"n": True, "Wybrana": False},
-            labels={"Mediana": "Mediana wieku ogłoszeń (dni)", "Technologia_Pojedyncza": ""},
+            labels={"Mediana": "Względny wiek ogłoszeń (percentyl w portalu)",
+                    "Technologia_Pojedyncza": ""},
         )
+        fig.add_vline(x=50, line_dash="dash", line_color="grey")
         fig.update_layout(yaxis={"categoryorder": "total ascending"}, legend_title_text="")
         st.plotly_chart(fig, width="stretch")
 
