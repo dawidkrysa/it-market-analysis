@@ -48,6 +48,9 @@ with f_col1:
     st.success("""
     **Weryfikacja Hipotez (Korelacje)** Statystyczne sprawdzenie z użyciem testów Spearmana/Kendalla, czy za rzadkie kompetencje rynek faktycznie płaci premię.
     """)
+    st.info("""
+    **Dla Firm** Benchmark wynagrodzeń, trudność rekrutacji, konkurencja o talenty i wskazówki do ogłoszenia - perspektywa pracodawcy szukającego ludzi.
+    """)
 
 with f_col2:
     st.warning("""

@@ -95,8 +95,9 @@ class JobPosting(Base):
     waluta = Column(SQLEnum(Currency), nullable=True)
     utworzono = Column(DateTime)
     zaktualizowano = Column(DateTime)
-    scraped_at = Column(DateTime, default=datetime.now(UTC))
-    data_pobrania = Column(DateTime, default=datetime.now(UTC))
+    # Callables, so the timestamp is taken per insert, not once at import time.
+    scraped_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    data_pobrania = Column(DateTime, default=lambda: datetime.now(UTC))
     source = Column(SQLEnum(Source), nullable=True)
 
 
@@ -539,6 +540,7 @@ class DatabaseHandler:
             Exception: If the database transaction fails.
         """
         session: Session = self.Session()
+        now = datetime.now(UTC)
         try:
             for job in jobs_data:
                 job_posting = JobPosting(
@@ -570,7 +572,9 @@ class DatabaseHandler:
                     waluta=job["Waluta"],
                     utworzono=job["Utworzono"],
                     zaktualizowano=job["Zaktualizowano"],
-                    data_pobrania=datetime.now(UTC),
+                    data_pobrania=now,
+                    # Refreshed on every re-scrape: "age at last observation".
+                    scraped_at=now,
                     source=job["Source"].strip().upper() if job.get("Source") else None,
                 )
                 session.merge(job_posting)
@@ -867,7 +871,9 @@ class DatabaseHandler:
         )
 
         # Exclude edge cases indicating missing data
-        df_exploded = df_exploded[df_exploded["Technologia_Pojedyncza"] != "brak danych"]
+        df_exploded = df_exploded[
+            ~df_exploded["Technologia_Pojedyncza"].isin(["brak danych", ""])
+        ]
 
         # Drop non-technical tags defined in the class constant
         df_exploded = df_exploded[
