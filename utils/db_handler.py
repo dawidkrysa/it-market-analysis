@@ -209,6 +209,8 @@ def _aggregate_niche_metrics(df: pd.DataFrame) -> pd.DataFrame:
                 "Ma_Realne_Wynagrodzenie",
                 lambda x: (x.sum() / len(x) * 100).round(1),
             ),
+            # n behind the median: offers that actually disclose a salary range
+            Liczba_Ofert_Z_Widelkami=("Ma_Realne_Wynagrodzenie", "sum"),
         )
         .reset_index()
     )
