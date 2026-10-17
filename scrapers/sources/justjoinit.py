@@ -108,11 +108,17 @@ class JustJoinIT(BaseScraper):
             # Only original PLN figures: other currencies would skew PLN medians.
             if emp.get("currencySource") != "original" or emp.get("currency") != "PLN":
                 continue
-            amount_from, amount_to = emp.get("fromPerUnit"), emp.get("toPerUnit")
+            unit = (emp.get("unit") or "").strip().lower()
+            if unit in ("hour", "month"):
+                # Native rate in its own unit.
+                amount_from, amount_to = emp.get("fromPerUnit"), emp.get("toPerUnit")
+            else:
+                # Daily/yearly rates: "from"/"to" already hold the monthly equivalent,
+                # so they land in the monthly buckets in the right unit.
+                amount_from, amount_to = emp.get("from"), emp.get("to")
             if amount_from is None and amount_to is None:
                 continue
             currency = emp.get("currency", currency)
-            unit = (emp.get("unit") or "").strip().lower()
             if unit == "hour":
                 if wynagrodzenie_godzinowe_od is None and wynagrodzenie_godzinowe_do is None:
                     wynagrodzenie_godzinowe_od, wynagrodzenie_godzinowe_do = amount_from, amount_to

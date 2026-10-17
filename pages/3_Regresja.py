@@ -241,6 +241,13 @@ st.dataframe(desc_table.round(2), width="stretch")
 # ANALYSIS 1: Number of Offers vs. Salary
 # ==========================================
 st.markdown("---")
+st.info(
+    "**Założenia testów:** obserwacjami są technologie, nie oferty. Jedna oferta zasila kilka "
+    "technologii naraz, więc obserwacje nie są w pełni niezależne, a wartości p mogą być zbyt "
+    "optymistyczne - traktuj wyniki na granicy istotności (p ≈ 0.01-0.05) ostrożnie. Wnioski "
+    "dotyczą tylko technologii z przedziału liczby ofert ustawionego w panelu bocznym."
+)
+
 st.header("1. Liczba Ofert vs Wynagrodzenie")
 
 # Calculate correlations

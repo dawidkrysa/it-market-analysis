@@ -140,7 +140,15 @@ else:
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Zidentyfikowane nisze", len(df_niches))
     col2.metric("Najlepsza technologia", df_niches.iloc[0]["Technologia_Pojedyncza"].title())
-    col3.metric("Mediana zarobków", f"{df_niches.iloc[0]['Mediana_Zarobkow']:,.0f} PLN")
+    col3.metric(
+        "Mediana zarobków",
+        f"{df_niches.iloc[0]['Mediana_Zarobkow']:,.0f} {unit_label}".replace(",", " "),
+        help=(
+            f"Policzona z {int(df_niches.iloc[0]['Liczba_Ofert_Z_Widelkami'])} ofert z widełkami. "
+            "Lider to nisza o najwyższej medianie - przy małym n sprawdź jej przedział ufności "
+            "na wykresie Top 15."
+        ),
+    )
 
     top_transparency = df_niches.iloc[0]["Procent_Ofert_Z_Widelkami"]
     transparency_label = (

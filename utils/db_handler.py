@@ -297,6 +297,15 @@ SALARY_TYPE_COLUMNS: dict[str, tuple[str, str]] = {
 }
 DEFAULT_SALARY_TYPE = "UoP (brutto)"
 
+# Plausible salary-range bounds per type (PLN). Values outside them are almost always
+# data-entry errors on the portal (e.g. an hourly rate of 70 posted as "monthly"), so
+# they are left out of salary statistics instead of skewing the medians.
+PLAUSIBLE_SALARY_RANGE: dict[str, tuple[float, float]] = {
+    "UoP (brutto)": (1_000, 100_000),
+    "B2B (netto)": (1_000, 100_000),
+    "Stawka godzinowa": (15, 1_000),
+}
+
 
 def _prepare_salary_data(
     df: pd.DataFrame, typ_wynagrodzenia: str = DEFAULT_SALARY_TYPE
@@ -325,6 +334,13 @@ def _prepare_salary_data(
     # Convert to numeric, coercing unparseable strings to NaN
     df["Wynagrodzenie Od"] = pd.to_numeric(df[od_col], errors="coerce")
     df["Wynagrodzenie Do"] = pd.to_numeric(df[do_col], errors="coerce")
+
+    # Drop implausible ranges (see PLAUSIBLE_SALARY_RANGE) for both bounds together.
+    low, high = PLAUSIBLE_SALARY_RANGE[typ_wynagrodzenia]
+    implausible = ~(
+        df["Wynagrodzenie Od"].between(low, high) & df["Wynagrodzenie Do"].between(low, high)
+    ) & (df["Wynagrodzenie Od"].notna() | df["Wynagrodzenie Do"].notna())
+    df.loc[implausible, ["Wynagrodzenie Od", "Wynagrodzenie Do"]] = float("nan")
 
     # Track rows that have real, explicitly stated salary boundaries
     df["Ma_Realne_Wynagrodzenie"] = df["Wynagrodzenie Od"].notna() & df["Wynagrodzenie Do"].notna()
@@ -891,7 +907,9 @@ class DatabaseHandler:
             ~df_exploded["Technologia_Pojedyncza"].isin(self.GENERIC_TECHNOLOGY_TAGS)
         ]
 
-        return df_exploded
+        # One row per (offer, technology): a tag repeated in one ad ("Python, python")
+        # must not count that offer twice.
+        return df_exploded.drop_duplicates(subset=["ID", "Technologia_Pojedyncza"])
 
     def _filter_viable_niches(self, df: pd.DataFrame, min_jobs: int, max_jobs: int) -> pd.DataFrame:
         """
