@@ -15,7 +15,7 @@ from scipy import stats
 from utils.db_handler import SALARY_TYPE_COLUMNS, DatabaseHandler
 
 # --- Configuration and Header ---
-st.title("📊 Analiza Korelacji: Niszowość vs Wynagrodzenia")
+st.title("Analiza Korelacji: Niszowość vs Wynagrodzenia")
 
 st.markdown("""
 **Cel analizy:** Weryfikujemy, czy strategia "Błękitnego Oceanu" ma rzeczywiste pokrycie w danych finansowych polskiego rynku IT. Sprawdzamy dwie kluczowe hipotezy badawcze:
@@ -24,7 +24,7 @@ st.markdown("""
 2. **Hipoteza Deficytu (Czas):** Zakładamy, że ogłoszenia, które najdłużej "wiszą" na rynku (najtrudniejsze do obsadzenia), oferują wyższe wynagrodzenia jako formę przyciągnięcia talentów.
 """)
 
-with st.expander("❓ Słowniczek pojęć statystycznych (Rozwiń, jeśli potrzebujesz)"):
+with st.expander("Słowniczek pojęć statystycznych (Rozwiń, jeśli potrzebujesz)"):
     st.markdown("""
     * **Korelacja (ρ / τ):** Wynik od -1 do 1. 
       * Wartość blisko **1** oznacza, że gdy rośnie jedna rzecz, rośnie też druga (np. więcej ofert = wyższa płaca).
@@ -55,7 +55,7 @@ def get_db_handler() -> DatabaseHandler:
 try:
     db = get_db_handler()
 except Exception as e:
-    st.error(f"❌ Błąd połączenia z bazą danych: {e}")
+    st.error(f"Błąd połączenia z bazą danych: {e}")
     st.stop()
 
 # --- Sidebar Panel ---
@@ -136,13 +136,13 @@ with st.spinner("Szybkie filtrowanie danych..."):
         else:
             df_niches = pd.DataFrame()
     except Exception as e:
-        st.error(f"❌ Błąd: {e}")
+        st.error(f"Błąd: {e}")
         st.stop()
 
 # Validate the retrieved dataset size before proceeding
 if df_niches is None or len(df_niches) < 3:
     st.warning(
-        "⚠️ Zbyt mało danych do analizy (minimum to 3 technologie). Dostosuj suwaki w panelu bocznym."
+        "Zbyt mało danych do analizy (minimum to 3 technologie). Dostosuj suwaki w panelu bocznym."
     )
     st.stop()
 
@@ -157,7 +157,7 @@ correlation_data = correlation_data[
 # Ensure we still have enough data points after applying salary filters
 if len(correlation_data) < 3:
     st.warning(
-        f"⚠️ Po zastosowaniu filtrów płacowych pozostało tylko {len(correlation_data)} technologii. Rozszerz zakres."
+        f"Po zastosowaniu filtrów płacowych pozostało tylko {len(correlation_data)} technologii. Rozszerz zakres."
     )
     st.stop()
 
@@ -174,12 +174,12 @@ def get_significance_label(p_value: float) -> str:
         str: A formatted string containing an indicator emoji and explanation.
     """
     if p_value < 0.001:
-        return "🟢 Bardzo silnie istotna (p < 0.001)"
+        return "Bardzo silnie istotna (p < 0.001)"
     if p_value < 0.01:
-        return "🟢 Silnie istotna (p < 0.01)"
+        return "Silnie istotna (p < 0.01)"
     if p_value < 0.05:
-        return "🟡 Istotna statystycznie (p < 0.05)"
-    return "🔴 Nieistotna (przypadek)"
+        return "Istotna statystycznie (p < 0.05)"
+    return "Nieistotna (przypadek)"
 
 
 def fit_ols(x: pd.Series, y: pd.Series) -> dict:
@@ -212,7 +212,7 @@ def fit_ols(x: pd.Series, y: pd.Series) -> dict:
 # DESCRIPTIVE STATISTICS
 # ==========================================
 st.markdown("---")
-st.header("0️⃣ Statystyki Opisowe")
+st.header("0. Statystyki Opisowe")
 st.caption(
     f"Policzone na {len(correlation_data)} technologiach spełniających aktualne filtry w panelu bocznym."
 )
@@ -241,7 +241,7 @@ st.dataframe(desc_table.round(2), width="stretch")
 # ANALYSIS 1: Number of Offers vs. Salary
 # ==========================================
 st.markdown("---")
-st.header("1️⃣ Liczba Ofert vs Wynagrodzenie")
+st.header("1. Liczba Ofert vs Wynagrodzenie")
 
 # Calculate correlations
 spearman_off, spearman_off_p = stats.spearmanr(
@@ -334,7 +334,7 @@ else:
 # ANALYSIS 2: Time on Market vs. Salary
 # ==========================================
 st.markdown("---")
-st.header("2️⃣ Czas na Rynku vs Wynagrodzenie")
+st.header("2. Czas na Rynku vs Wynagrodzenie")
 
 # Calculate correlations
 spearman_time, spearman_time_p = stats.spearmanr(
