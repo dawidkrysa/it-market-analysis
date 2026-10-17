@@ -12,12 +12,13 @@ import plotly.express as px
 import streamlit as st
 from scipy import stats
 
+from utils.charts import palette
 from utils.db_handler import SALARY_TYPE_COLUMNS, DatabaseHandler
+from utils.ui import salary_type_selector
 
 BOOTSTRAP_RESAMPLES = 2000
 RELIABLE_N = 10  # below this many observations a statistic is flagged as unreliable
 LEVEL_LABELS = {"TRAINEE": "Trainee", "JUNIOR": "Junior", "MID": "Mid", "SENIOR": "Senior"}
-BAR_COLOR = "#4e79a7"
 
 
 def bootstrap_median_ci(values: np.ndarray, alpha: float = 0.05) -> tuple[float, float]:
@@ -57,11 +58,8 @@ st.markdown(
 )
 
 # --- Sidebar filters ---
-st.sidebar.markdown("### Kogo szukasz?")
-typ_wynagrodzenia = st.sidebar.selectbox(
-    "Forma zatrudnienia (widełki):", options=list(SALARY_TYPE_COLUMNS.keys())
-)
-unit = "PLN/h" if typ_wynagrodzenia == "Stawka godzinowa" else "PLN"
+typ_wynagrodzenia, unit = salary_type_selector()
+pal = palette()
 
 with st.spinner("Przetwarzanie ofert pracy..."):
     try:
@@ -74,6 +72,7 @@ if df_raw.empty or df_exploded.empty:
     st.warning("Baza danych jest pusta - uruchom scraping w panelu administracyjnym.")
     st.stop()
 
+st.sidebar.markdown("### Kogo szukasz?")
 available_levels = [lvl for lvl in LEVEL_LABELS if lvl in set(df_raw["Poziom"].dropna())]
 poziomy = st.sidebar.multiselect(
     "Poziom doświadczenia:",
@@ -136,7 +135,10 @@ with tab_bench:
         c2.metric(
             "Mediana rynku",
             fmt_money(med, unit),
-            help=f"95% przedział ufności mediany: {fmt_money(ci_low, unit)} - {fmt_money(ci_high, unit)}.",
+            delta=f"95% CI: {fmt_money(ci_low, unit)} - {fmt_money(ci_high, unit)}",
+            delta_color="off",
+            delta_arrow="off",
+            help="Przedział ufności mediany z bootstrapu (2000 losowań).",
         )
         c3.metric("Górny kwartyl (P75)", fmt_money(p75, unit), help="25% ofert płaci więcej.")
         c4.metric("Liczba obserwacji (n)", len(salaries))
@@ -190,7 +192,7 @@ with tab_bench:
                 points="outliers",
                 category_orders={"Poziom": [LEVEL_LABELS[p] for p in LEVEL_LABELS]},
                 labels={"Srednia_Kwota": f"Środek widełek ({unit})"},
-                color_discrete_sequence=[BAR_COLOR],
+                color_discrete_sequence=[pal.accent],
             )
             st.plotly_chart(fig, width="stretch")
 
@@ -274,7 +276,7 @@ with tab_hard:
             y="Technologia_Pojedyncza",
             orientation="h",
             color="Wybrana",
-            color_discrete_map={"wybrana technologia": "#e15759", "pozostałe": BAR_COLOR},
+            color_discrete_map={"wybrana technologia": pal.highlight, "pozostałe": pal.accent},
             hover_data={"n": True, "Wybrana": False},
             labels={"Mediana": "Względny wiek ogłoszeń (percentyl w portalu)",
                     "Technologia_Pojedyncza": ""},
@@ -307,7 +309,7 @@ with tab_comp:
             x="Oferty",
             y="Firma",
             orientation="h",
-            color_discrete_sequence=[BAR_COLOR],
+            color_discrete_sequence=[pal.accent],
             title="Najaktywniej rekrutujące firmy",
         )
         fig.update_layout(yaxis={"categoryorder": "total ascending"})
@@ -328,7 +330,7 @@ with tab_comp:
                 x="Oferty",
                 y="Miasto",
                 orientation="h",
-                color_discrete_sequence=[BAR_COLOR],
+                color_discrete_sequence=[pal.accent],
                 title="Oferty według miasta (top 10)",
             )
             fig.update_layout(yaxis={"categoryorder": "total ascending"})
@@ -345,7 +347,7 @@ with tab_comp:
                 sources,
                 x="Portal",
                 y="Oferty",
-                color_discrete_sequence=[BAR_COLOR],
+                color_discrete_sequence=[pal.accent],
                 title="Oferty według portalu",
             )
             st.plotly_chart(fig, width="stretch")
@@ -388,7 +390,7 @@ with tab_ad:
             x="Udział",
             y="Technologia",
             orientation="h",
-            color_discrete_sequence=[BAR_COLOR],
+            color_discrete_sequence=[pal.accent],
             hover_data={"Lift": ":.2f"},
             labels={"Udział": f"% ofert z '{technologia}', które wymagają też tej technologii"},
         )

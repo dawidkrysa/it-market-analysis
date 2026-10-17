@@ -12,7 +12,9 @@ import statsmodels.api as sm
 import streamlit as st
 from scipy import stats
 
-from utils.db_handler import SALARY_TYPE_COLUMNS, DatabaseHandler
+from utils.charts import palette
+from utils.db_handler import DatabaseHandler
+from utils.ui import salary_type_selector
 
 # --- Configuration and Header ---
 st.title("Analiza Korelacji: Niszowość vs Wynagrodzenia")
@@ -59,17 +61,9 @@ except Exception as e:
     st.stop()
 
 # --- Sidebar Panel ---
-st.sidebar.markdown("### Typ wynagrodzenia")
-typ_wynagrodzenia = st.sidebar.selectbox(
-    "Widełki do analizy:",
-    options=list(SALARY_TYPE_COLUMNS.keys()),
-    help=(
-        "Każda oferta może mieć kilka wariantów wynagrodzenia naraz "
-        "(UoP, B2B, stawka godzinowa) — wybierz, który ma być porównywany."
-    ),
-)
+typ_wynagrodzenia, jednostka_label = salary_type_selector()
+pal = palette()
 jest_stawka_godzinowa = typ_wynagrodzenia == "Stawka godzinowa"
-jednostka_label = "PLN/h" if jest_stawka_godzinowa else "PLN"
 
 st.sidebar.markdown("### Wielkość rynku")
 min_jobs = st.sidebar.slider(
@@ -411,7 +405,7 @@ fig2 = px.scatter(
         "Mediana_Zarobkow": f"Mediana Wynagrodzeń ({jednostka_label})",
         "Technologia_Pojedyncza": "Technologia",
     },
-    color_discrete_sequence=["coral"],
+    color_discrete_sequence=[pal.accent],
     trendline="ols",
     title="Wizualizacja trendu: Czas wakatu a zarobki",
 )

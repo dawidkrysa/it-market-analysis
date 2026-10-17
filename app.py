@@ -25,6 +25,20 @@ if "is_admin" not in st.session_state:
 # Retrieve the admin key securely from settings without instantiating the class
 ADMIN_KEY = Settings.ADMIN_KEY
 
+# Shared look: KPI tiles render as uniform, neutral cards on every page.
+st.markdown(
+    """
+    <style>
+    [data-testid="stMetric"] {
+        border: 1px solid rgba(128, 128, 128, 0.25);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Initialize application logging
 logger = setup_logging()
 
