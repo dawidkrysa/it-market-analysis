@@ -33,6 +33,11 @@ class Settings:
     # Automatic scraping (scrapers/scheduler.py). An interval <= 0 disables it.
     SCRAPE_INTERVAL_HOURS: float = float(os.getenv("SCRAPE_INTERVAL_HOURS", "24"))
     SCRAPE_LEVELS: str = os.getenv("SCRAPE_LEVELS", "junior,mid,senior")
+    # Postings not seen by a successful scrape for this many days are deleted (0 keeps all).
+    SCRAPE_RETENTION_DAYS: int = int(os.getenv("SCRAPE_RETENTION_DAYS", "30"))
+    # Open a fresh DB connection per query instead of pooling, so an idle web service
+    # holds no connections (lets Railway's serverless sleep kick in). Set to "1" to enable.
+    DB_NULL_POOL: bool = os.getenv("DB_NULL_POOL", "0") == "1"
 
     @classmethod
     def validate(cls) -> None:

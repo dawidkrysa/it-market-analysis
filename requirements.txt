@@ -1,16 +1,18 @@
-# Data Manipulation & Math
+# Runtime dependencies of the app image (keep it lean: every MB is pulled on deploy).
+# Notebook/dev tooling lives in requirements-dev.txt.
+
+# Data manipulation & statistics
 pandas
 numpy
 scipy
 statsmodels
-openpyxl
+openpyxl  # XLSX import of the bootcamp catalog (admin panel)
 
-# Web Scraping & Networking
+# Web scraping & networking
 requests
 beautifulsoup4
-lxml
 
-# Database & Storage
+# Database & configuration
 sqlalchemy
 psycopg2-binary
 python-dotenv
@@ -18,11 +20,3 @@ python-dotenv
 # Visualization & UI
 streamlit
 plotly
-ipywidgets
-
-# Environment & Config
-python-dotenv
-
-# Jupyter Core
-jupyter
-ipykernel

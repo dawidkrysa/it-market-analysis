@@ -7,7 +7,7 @@ to save, retrieve, clean, and analyze job market data.
 
 import enum
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pandas as pd
@@ -17,6 +17,7 @@ from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import Session
+from sqlalchemy.pool import NullPool
 
 from config.settings import Settings
 
@@ -297,6 +298,18 @@ SALARY_TYPE_COLUMNS: dict[str, tuple[str, str]] = {
 }
 DEFAULT_SALARY_TYPE = "UoP (brutto)"
 
+# Columns kept in the cached exploded (offer x technology) frame.
+EXPLODED_COLUMNS = [
+    "ID",
+    "Technologia_Pojedyncza",
+    "Srednia_Kwota",
+    "Ma_Realne_Wynagrodzenie",
+    "Czas_Na_Rynku_Dni",
+    "Wzgledny_Wiek_Pct",
+    "Source",
+    "Poziom",
+]
+
 # Plausible salary-range bounds per type (PLN). Values outside them are almost always
 # data-entry errors on the portal (e.g. an hourly rate of 70 posted as "monthly"), so
 # they are left out of salary statistics instead of skewing the medians.
@@ -543,7 +556,12 @@ class DatabaseHandler:
         # psycopg 3, while this project installs psycopg2 (psycopg2-binary).
         if database_url.startswith("postgresql://"):
             database_url = database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
-        self.engine: Engine = create_engine(database_url)
+        self.engine: Engine = create_engine(
+            database_url,
+            # Validate pooled connections, so a DB restart/idle cutoff doesn't surface as errors.
+            pool_pre_ping=True,
+            **({"poolclass": NullPool} if Settings.DB_NULL_POOL else {}),
+        )
         self.Session: sessionmaker[Session] = sessionmaker(bind=self.engine)
 
     def create_tables(self) -> None:
@@ -728,6 +746,32 @@ class DatabaseHandler:
         finally:
             session.close()
 
+    def delete_stale_jobs(self, older_than: timedelta) -> int:
+        """
+        Delete postings that no scrape has seen for longer than `older_than`.
+
+        Args:
+            older_than (timedelta): Maximum time since a posting was last observed.
+
+        Returns:
+            int: The number of deleted postings.
+        """
+        cutoff = datetime.now(UTC) - older_than
+        session: Session = self.Session()
+        try:
+            deleted = (
+                session.query(JobPosting)
+                .filter(JobPosting.scraped_at < cutoff)
+                .delete(synchronize_session=False)
+            )
+            session.commit()
+            return deleted
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
     def get_bootcamps(self) -> pd.DataFrame:
         """
         Retrieve all bootcamp cost/duration records.
@@ -865,6 +909,10 @@ class DatabaseHandler:
         df_raw = _calculate_market_time(df_raw)
         df_exploded = db._explode_technologies(df_raw.copy())
         niche_analysis = _aggregate_niche_metrics(df_exploded)
+
+        # Keep only the columns the pages read from the exploded frame: it has one row per
+        # (offer, technology) and is cached per salary type, so this cuts memory ~4x.
+        df_exploded = df_exploded[EXPLODED_COLUMNS]
 
         return df_raw, df_exploded, niche_analysis
 

@@ -1,2 +1,8 @@
 # Dev-only tooling (not needed in the Docker runtime image)
+-r requirements.txt
 ruff
+
+# Jupyter for notebooks/ (exploration, optional initial bootcamp import)
+jupyter
+ipykernel
+ipywidgets
