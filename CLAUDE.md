@@ -15,8 +15,13 @@ docker-compose up --build                               # standard run
 docker-compose -f docker-compose.dev.yml up --build      # dev profile: hot-reload, DEBUG_MODE=true
 docker-compose exec streamlit-app /bin/bash               # shell into the app container
 docker-compose exec db psql -U $POSTGRES_USER -d $POSTGRES_DB   # psql shell
-docker-compose exec streamlit-app python -c "from scrapers.scraper_manager import ScraperManager; ScraperManager().run_all()"  # manual scrape
+docker-compose exec streamlit-app python -c "from scrapers.scrape_job import run_scrape_job; print(run_scrape_job('manual', 'junior,mid,senior'))"  # manual scrape
+docker-compose logs -f scraper-scheduler                  # periodic scraper (scrapers/scheduler.py)
 ```
+
+Scraping always goes through `scrapers/scrape_job.run_scrape_job()`: it records the run in `scrape_runs` and takes a Postgres advisory lock, so the admin button and the `scraper-scheduler` service never scrape concurrently. Interval/levels come from `SCRAPE_INTERVAL_HOURS` / `SCRAPE_LEVELS` (`0` disables). Code changes in `scrapers/` or `utils/` need a container restart (`docker restart <container>`) — Streamlit's reload doesn't re-import them, and the scheduler is a plain long-running process.
+
+`requirements.txt` is unpinned, so a rebuild can pull newer libraries (e.g. SQLAlchemy 2.1 changed the default Postgres driver — `DatabaseHandler` pins `postgresql+psycopg2` for that reason).
 
 Config comes from `.env` (copy from `.env.example`), loaded via `config/settings.py`. Required vars: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_HOST`, `POSTGRES_PORT`, `STREAMLIT_PORT`, `ADMIN_KEY`.
 

@@ -23,6 +23,29 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-CHANGE_ME}:${POSTGRES_PASSWORD:-CHANGE_ME}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-CHANGE_ME}
 
+  scraper-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Periodic scraping (see scrapers/scheduler.py); same image as the app.
+    command: ["python", "-m", "scrapers.scheduler"]
+    volumes:
+      - .:/app
+      - /app/.venv
+      - /app/__pycache__
+      - ./logs:/app/logs
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # The image's healthcheck probes Streamlit, which this container doesn't run.
+    healthcheck:
+      disable: true
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-CHANGE_ME}:${POSTGRES_PASSWORD:-CHANGE_ME}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-CHANGE_ME}
+      - SCRAPE_INTERVAL_HOURS=${SCRAPE_INTERVAL_HOURS:-24}
+      - SCRAPE_LEVELS=${SCRAPE_LEVELS:-junior,mid,senior}
+
   db:
     image: postgres:16-alpine
     restart: unless-stopped

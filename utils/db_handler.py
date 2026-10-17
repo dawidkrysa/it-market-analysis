@@ -123,6 +123,33 @@ class Bootcamp(Base):
     mediana_czasu_dni = Column(Float, nullable=True)
 
 
+class ScrapeRun(Base):
+    """
+    SQLAlchemy model recording one scraping run (scheduled or manual).
+
+    Attributes:
+        id: Auto-incrementing run identifier.
+        trigger: "auto" (scheduler) or "manual" (admin panel).
+        experience_levels: Comma-separated levels requested in this run.
+        started_at: UTC timestamp when the run started.
+        finished_at: UTC timestamp when the run ended (NULL while running).
+        status: "running", "success" or "failed".
+        saved_count: Number of job postings saved by the run.
+        error: Error message for failed runs.
+    """
+
+    __tablename__: str = "scrape_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    trigger = Column(Text, nullable=False)
+    experience_levels = Column(Text, nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(Text, nullable=False)
+    saved_count = Column(Integer, nullable=True)
+    error = Column(Text, nullable=True)
+
+
 def __normalize_company_name(name: str) -> str:
     """
     Standardize and clean corporate names for accurate deduplication.
@@ -484,6 +511,10 @@ class DatabaseHandler:
         Args:
             database_url (str): SQLAlchemy database URL (defaults to Settings configuration).
         """
+        # Pin the driver explicitly: SQLAlchemy >= 2.1 maps bare "postgresql://" to
+        # psycopg 3, while this project installs psycopg2 (psycopg2-binary).
+        if database_url.startswith("postgresql://"):
+            database_url = database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
         self.engine: Engine = create_engine(database_url)
         self.Session: sessionmaker[Session] = sessionmaker(bind=self.engine)
 
@@ -583,6 +614,86 @@ class DatabaseHandler:
         session: Session = self.Session()
         try:
             return session.query(JobPosting).count()
+        finally:
+            session.close()
+
+    def start_scrape_run(self, trigger: str, experience_levels: str) -> int:
+        """
+        Record the start of a scraping run.
+
+        Args:
+            trigger (str): "auto" (scheduler) or "manual" (admin panel).
+            experience_levels (str): Comma-separated levels being scraped.
+
+        Returns:
+            int: The new run's ID.
+        """
+        session: Session = self.Session()
+        try:
+            run = ScrapeRun(
+                trigger=trigger,
+                experience_levels=experience_levels,
+                started_at=datetime.now(UTC),
+                status="running",
+            )
+            session.add(run)
+            session.commit()
+            return run.id
+        finally:
+            session.close()
+
+    def finish_scrape_run(
+        self, run_id: int, status: str, saved_count: int | None = None, error: str | None = None
+    ) -> None:
+        """
+        Mark a scraping run as finished.
+
+        Args:
+            run_id (int): ID returned by `start_scrape_run`.
+            status (str): "success" or "failed".
+            saved_count (int | None): Number of saved postings.
+            error (str | None): Error message for failed runs.
+        """
+        session: Session = self.Session()
+        try:
+            run = session.get(ScrapeRun, run_id)
+            if run is not None:
+                run.finished_at = datetime.now(UTC)
+                run.status = status
+                run.saved_count = saved_count
+                run.error = error
+                session.commit()
+        finally:
+            session.close()
+
+    def get_last_scrape_run(self, only_success: bool = False) -> dict[str, Any] | None:
+        """
+        Retrieve the most recently started scraping run.
+
+        Args:
+            only_success (bool): Consider only runs that finished successfully.
+
+        Returns:
+            dict[str, Any] | None: Run fields (trigger, status, started_at,
+                finished_at, saved_count, error), or None if there are no runs.
+        """
+        session: Session = self.Session()
+        try:
+            query = session.query(ScrapeRun)
+            if only_success:
+                query = query.filter(ScrapeRun.status == "success")
+            run = query.order_by(ScrapeRun.started_at.desc()).first()
+            if run is None:
+                return None
+            return {
+                "trigger": run.trigger,
+                "status": run.status,
+                "experience_levels": run.experience_levels,
+                "started_at": run.started_at,
+                "finished_at": run.finished_at,
+                "saved_count": run.saved_count,
+                "error": run.error,
+            }
         finally:
             session.close()
 
