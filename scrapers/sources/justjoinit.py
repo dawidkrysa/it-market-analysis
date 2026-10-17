@@ -72,7 +72,7 @@ class JustJoinIT(BaseScraper):
             offer: Raw job offer dictionary from the API.
 
         Returns:
-            List of parsed job dictionaries (one per location).
+            List with one parsed job dictionary (first listed location).
         """
         base_slug = offer.get("slug", "")
         if not base_slug:
@@ -121,9 +121,11 @@ class JustJoinIT(BaseScraper):
                     wynagrodzenie_b2b_od, wynagrodzenie_b2b_do = amount_from, amount_to
 
         results = []
+        # Salary and technologies are identical for every city an offer lists, so
+        # keep only the first location: one row per offer, not per city.
         locations = offer.get(
             "locations", [{"city": offer.get("city", "Nieznana"), "slug": base_slug}]
-        )
+        )[:1]
 
         for loc in locations:
             results.append(
