@@ -5,44 +5,46 @@ environment-specific settings and maintain consistency across the application.
 """
 
 import os
-from typing import Any
-from dotenv import load_dotenv
 from pathlib import Path
+from typing import Any
+
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-env_path = BASE_DIR / '.env'
+env_path = BASE_DIR / ".env"
 
 if env_path.exists():
     load_dotenv(env_path)
+
 
 class Settings:
     """Application settings loaded from environment variables."""
 
     # Logging
-    LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
-    LOG_FILE: str = os.getenv('LOG_FILE', '/app/logs/app.log')
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    LOG_FILE: str = os.getenv("LOG_FILE", "/app/logs/app.log")
 
     DATABASE_URL: str = os.getenv(
-        'DATABASE_URL',
-        'postgresql://CHANGE_ME:CHANGE_ME@db:5432/CHANGE_ME'
+        "DATABASE_URL", "postgresql://CHANGE_ME:CHANGE_ME@db:5432/CHANGE_ME"
     )
 
-    ADMIN_KEY: str = os.getenv('ADMIN_KEY', 'CHANGE_ME')
+    ADMIN_KEY: str = os.getenv("ADMIN_KEY", "CHANGE_ME")
 
-    
+    # Automatic scraping (scrapers/scheduler.py). An interval <= 0 disables it.
+    SCRAPE_INTERVAL_HOURS: float = float(os.getenv("SCRAPE_INTERVAL_HOURS", "24"))
+    SCRAPE_LEVELS: str = os.getenv("SCRAPE_LEVELS", "junior,mid,senior")
+
     @classmethod
     def validate(cls) -> None:
         """Validate configuration values."""
         if not cls.DATABASE_URL.startswith("postgresql://"):
             raise ValueError("DATABASE_URL must be a valid PostgreSQL connection string.")
-    
+
     @classmethod
-    def get_all(cls)-> dict[str, Any]:
+    def get_all(cls) -> dict[str, Any]:
         """Get all configuration as a dictionary."""
         return {
-            key: getattr(cls, key)
-            for key in dir(cls)
-            if not key.startswith('_') and key.isupper()
+            key: getattr(cls, key) for key in dir(cls) if not key.startswith("_") and key.isupper()
         }
 
 

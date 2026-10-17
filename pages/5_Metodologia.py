@@ -6,13 +6,22 @@ It provides functionalities to fetch job offers via web scraping from
 portals like JustJoin.it, view raw records, and clear the database.
 """
 
-import time
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
 
-from scrapers.scraper_manager import ScraperManager
+from config.settings import Settings
+from scrapers.scrape_job import run_scrape_job
 from utils.db_handler import DatabaseHandler
+
+LOCAL_TZ = ZoneInfo("Europe/Warsaw")
+
+
+def format_local(ts: datetime) -> str:
+    """Format a UTC timestamp in Polish local time, e.g. "17.10.2026 09:30"."""
+    return ts.astimezone(LOCAL_TZ).strftime("%d.%m.%Y %H:%M")
 
 st.set_page_config(page_title="Zarządzanie Danymi", page_icon=":material/database:", layout="wide")
 
@@ -95,10 +104,41 @@ tab_status, tab_fetch, tab_view, tab_bootcamps, tab_clear = st.tabs(
 with tab_status:
     st.subheader("Aktualny stan bazy danych")
 
-    col1, col2, col3 = st.columns(3)
+    last_run = db_handler.get_last_scrape_run()
+    last_success = db_handler.get_last_scrape_run(only_success=True)
+
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Liczba zebranych ofert", f"{record_count:,}".replace(",", " "))
     col2.metric("Status Bazy", "Aktywna" if record_count > 0 else "Pusta")
-    col3.metric("Ostatnia aktualizacja", "Dziś" if record_count > 0 else "Brak")
+    col3.metric(
+        "Ostatnia aktualizacja",
+        format_local(last_success["finished_at"]) if last_success else "Brak",
+        help="Ostatni udany scraping (automatyczny lub ręczny).",
+    )
+    if Settings.SCRAPE_INTERVAL_HOURS > 0:
+        next_run = (
+            last_success["finished_at"] + timedelta(hours=Settings.SCRAPE_INTERVAL_HOURS)
+            if last_success
+            else None
+        )
+        col4.metric(
+            "Następny automatyczny scraping",
+            format_local(next_run) if next_run else "Wkrótce",
+            help=f"Co {Settings.SCRAPE_INTERVAL_HOURS:g} h (zmienna SCRAPE_INTERVAL_HOURS).",
+        )
+    else:
+        col4.metric("Automatyczny scraping", "Wyłączony")
+
+    if last_run and last_run["status"] == "running":
+        st.info(
+            f"Scraping w toku ({'automatyczny' if last_run['trigger'] == 'auto' else 'ręczny'}),"
+            f" rozpoczęty {format_local(last_run['started_at'])}."
+        )
+    elif last_run and last_run["status"] == "failed":
+        st.warning(
+            f"Ostatni scraping ({format_local(last_run['started_at'])}) zakończył się błędem: "
+            f"{last_run['error']}"
+        )
 
     if record_count > 0:
         st.markdown("---")
@@ -143,38 +183,21 @@ with tab_fetch:
     )
 
     if st.button("Rozpocznij Scraping Danych", type="primary", disabled=not selected_labels):
-        progress_bar = st.progress(0, text="Inicjalizacja scraperów...")
-        status_box = st.info("Uruchamianie silnika...")
+        experience_levels = ",".join(level_labels[label] for label in selected_labels)
+        with st.spinner("Pobieranie i zapisywanie ofert. To może potrwać kilka minut..."):
+            result = run_scrape_job("manual", experience_levels)
 
-        try:
-            manager = ScraperManager()
-            experience_levels = ",".join(level_labels[label] for label in selected_labels)
-
-            # Simulated progress feedback
-            progress_bar.progress(25, text="Nawiązywanie połączeń z portalami...")
-            time.sleep(1)  # Visual pause
-
-            progress_bar.progress(
-                50, text="Pobieranie i parsowanie ofert. To może potrwać kilka minut..."
+        if result.status == "success":
+            st.session_state.action_msg = (
+                f"Sukces! Pobrano i zapisano {result.saved_count} ofert."
             )
-            all_jobs = manager.run_all(experience_levels=experience_levels)
-
-            progress_bar.progress(85, text="Zapisywanie do lokalnej bazy danych...")
-            if all_jobs:
-                saved_count = db_handler.save_jobs(all_jobs)
-                st.session_state.action_msg = (
-                    f"Sukces! Pomyślnie zeskrapowano i zapisano {saved_count} nowych ofert."
-                )
-            else:
-                st.session_state.action_msg = "Scraper zakończył pracę, ale nie znalazł nowych ofert pasujących do kryteriów."
-
-            progress_bar.progress(100, text="Zakończono!")
-            time.sleep(1)
             st.rerun()
-
-        except Exception as e:
-            progress_bar.empty()
-            status_box.error(f"Krytyczny błąd scrapera: {e}")
+        elif result.status == "skipped":
+            st.warning(
+                "Inny scraping (np. automatyczny) jest właśnie w toku. Spróbuj ponownie później."
+            )
+        else:
+            st.error(f"Krytyczny błąd scrapera: {result.error}")
 
 # ==========================================
 # TAB 3: Data Viewer
