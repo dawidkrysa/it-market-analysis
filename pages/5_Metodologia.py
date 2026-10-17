@@ -186,7 +186,7 @@ with tab_view:
         st.info("Baza danych jest pusta. Uruchom scraper w zakładce 'Pobieranie danych'.")
     else:
 
-        @st.cache_data(ttl=60)
+        @st.cache_data(ttl=60, show_spinner=False)
         def load_df() -> pd.DataFrame:
             """
             Load all job records from the database into a DataFrame.

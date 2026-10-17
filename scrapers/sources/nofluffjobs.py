@@ -140,7 +140,11 @@ class NoFluffJobs(BaseScraper):
 
         # Locations
         results = []
-        locations = offer.get("location", {}).get("places", [])
+        # Salary and technologies are identical for every city an offer lists, so
+        # keep only the first usable location: one row per offer, not per city.
+        locations = [
+            loc for loc in offer.get("location", {}).get("places", []) if loc.get("url")
+        ][:1]
 
         for loc in locations:
             base_slug = loc.get("url", "")

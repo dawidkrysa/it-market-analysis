@@ -688,7 +688,7 @@ class DatabaseHandler:
 
     @staticmethod
     @st.cache_data(
-        ttl=3600, max_entries=len(SALARY_TYPE_COLUMNS)
+        ttl=3600, max_entries=len(SALARY_TYPE_COLUMNS), show_spinner=False
     )  # ttl=3600 refreshes the cache every hour
     def get_cached_market_data(
         typ_wynagrodzenia: str = DEFAULT_SALARY_TYPE,
