@@ -5,11 +5,38 @@ This module helps identify 'blue oceans' in the IT job market:
 high-paying, high-demand, but low-supply technology niches.
 """
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from utils.db_handler import SALARY_TYPE_COLUMNS, DatabaseHandler
+
+BOOTSTRAP_RESAMPLES = 2000
+RELIABLE_N = 10  # below this many salary observations a median is flagged as shaky
+
+
+def bootstrap_median_ci(values: np.ndarray, alpha: float = 0.05) -> tuple[float, float]:
+    """
+    Percentile-bootstrap confidence interval for the median.
+
+    Args:
+        values (np.ndarray): Salary observations (no NaN).
+        alpha (float): Significance level (0.05 -> 95% interval).
+
+    Returns:
+        tuple[float, float]: Lower and upper bound; (nan, nan) for fewer than 2 values.
+    """
+    if len(values) < 2:
+        return float("nan"), float("nan")
+    rng = np.random.default_rng(42)  # fixed seed -> stable chart between reruns
+    medians = np.median(
+        rng.choice(values, size=(BOOTSTRAP_RESAMPLES, len(values)), replace=True), axis=1
+    )
+    low, high = np.quantile(medians, [alpha / 2, 1 - alpha / 2])
+    return float(low), float(high)
+
 
 # --- Header and Description ---
 st.title("Strategia Błękitnego Oceanu 🌊")
@@ -35,6 +62,8 @@ typ_wynagrodzenia = st.sidebar.selectbox(
     ),
 )
 
+unit_label = "PLN/h" if typ_wynagrodzenia == "Stawka godzinowa" else "PLN"
+
 # --- Sidebar: User-defined parameters for niche sizing ---
 st.sidebar.markdown("### Parametry Niszy")
 min_jobs = st.sidebar.slider(
@@ -52,6 +81,18 @@ max_jobs = st.sidebar.slider(
     value=70,
     step=1,
     help="Brak nasycenia – odrzuca 'czerwone oceany'.",
+)
+
+min_n_salary = st.sidebar.slider(
+    "Min. ofert z widełkami (n)",
+    min_value=1,
+    max_value=30,
+    value=5,
+    step=1,
+    help=(
+        "Mediana z kilku ogłoszeń jest niewiarygodna - nisze z mniejszą liczbą "
+        "obserwacji płacowych są pomijane."
+    ),
 )
 
 
@@ -81,6 +122,7 @@ with st.spinner("Przetwarzanie tysięcy ofert pracy... "):
 
         if not niche_analysis.empty:
             df_niches = db._filter_viable_niches(niche_analysis, min_jobs, max_jobs)
+            df_niches = df_niches[df_niches["Liczba_Ofert_Z_Widelkami"] >= min_n_salary]
         else:
             df_niches = pd.DataFrame()
     except Exception as e:
@@ -118,43 +160,85 @@ else:
         )
 
     st.markdown("---")
-    st.subheader("Wizualizacja Top 15 Nisz")
-
-    # Replaced st.info with standard markdown for a cleaner look
+    st.subheader("Mapa Nisz: popyt vs wynagrodzenie")
     st.markdown(
-        "*Wysokość słupka = zarobki. Kolor = czas aktywności ogłoszenia (ciemniejszy = trudniej zrekrutować).*"
+        "*Oś X (skala log) = liczba ofert, oś Y = mediana płac, rozmiar = liczba ofert z "
+        "widełkami (n), kolor = czas aktywności ogłoszenia. Linie przerywane to mediany "
+        "całego zestawu - lewy górny róg to kandydaci na błękitny ocean.*"
     )
-
-    top_15 = (
-        df_niches.head(15).copy().dropna(subset=["Mediana_Zarobkow", "Sredni_Czas_Zatrudnienia"])
-    )
-    top_15["Mediana_Zarobkow"] = top_15["Mediana_Zarobkow"].round(2)
-    top_15["Sredni_Czas_Zatrudnienia"] = top_15["Sredni_Czas_Zatrudnienia"].round(2)
-    top_15["Jakosc_Danych"] = top_15["Procent_Ofert_Z_Widelkami"].apply(
-        lambda x: "🟢" if x >= 50 else ("🟡" if x >= 25 else "🔴")
-    )
-
-    # Create the Top 15 Niches bar chart
-    fig = px.bar(
-        top_15,
-        x="Technologia_Pojedyncza",
+    bubble = df_niches.dropna(subset=["Mediana_Zarobkow", "Sredni_Czas_Zatrudnienia"]).copy()
+    bubble["Sredni_Czas_Zatrudnienia"] = bubble["Sredni_Czas_Zatrudnienia"].round(1)
+    fig_map = px.scatter(
+        bubble,
+        x="Liczba_Ofert",
         y="Mediana_Zarobkow",
+        size="Liczba_Ofert_Z_Widelkami",
         color="Sredni_Czas_Zatrudnienia",
+        hover_name="Technologia_Pojedyncza",
         hover_data={
             "Procent_Ofert_Z_Widelkami": ":.1f",
-            "Jakosc_Danych": True,
+            "Liczba_Ofert_Z_Widelkami": True,
             "Liczba_Ofert": True,
-            "Technologia_Pojedyncza": False,
+            "Sredni_Czas_Zatrudnienia": ":.1f",
         },
+        log_x=True,
         color_continuous_scale="Blues",
         labels={
-            "Technologia_Pojedyncza": "Technologia",
-            "Mediana_Zarobkow": "Mediana (PLN)",
-            "Sredni_Czas_Zatrudnienia": "Czas na Rynku (Dni)",
+            "Liczba_Ofert": "Liczba ofert (log)",
+            "Mediana_Zarobkow": f"Mediana ({unit_label})",
+            "Liczba_Ofert_Z_Widelkami": "n z widełkami",
+            "Sredni_Czas_Zatrudnienia": "Czas na rynku (dni)",
+            "Procent_Ofert_Z_Widelkami": "Transparentność (%)",
         },
-        title="Opłacalność vs. Deficyt Kandydatów",
     )
-    fig.update_layout(xaxis={"categoryorder": "total descending"})
+    fig_map.add_vline(x=bubble["Liczba_Ofert"].median(), line_dash="dash", line_color="grey")
+    fig_map.add_hline(y=bubble["Mediana_Zarobkow"].median(), line_dash="dash", line_color="grey")
+    st.plotly_chart(fig_map, width="stretch")
+
+    st.subheader("Top 15 Nisz z przedziałami ufności")
+    st.markdown(
+        f"*Słupek = mediana, wąsy = 95% przedział ufności mediany (bootstrap, "
+        f"{BOOTSTRAP_RESAMPLES} losowań). Szare słupki: mniej niż {RELIABLE_N} obserwacji "
+        "płacowych - traktuj ostrożnie.*"
+    )
+    top_15 = df_niches.head(15).copy().dropna(subset=["Mediana_Zarobkow"])
+    salary_by_tech = {
+        tech: grp["Srednia_Kwota"].dropna().to_numpy()
+        for tech, grp in df_exploded[
+            df_exploded["Technologia_Pojedyncza"].isin(top_15["Technologia_Pojedyncza"])
+        ].groupby("Technologia_Pojedyncza")
+    }
+    ci = [
+        bootstrap_median_ci(salary_by_tech.get(t, np.array([])))
+        for t in top_15["Technologia_Pojedyncza"]
+    ]
+    top_15["ci_low"] = [c[0] for c in ci]
+    top_15["ci_high"] = [c[1] for c in ci]
+    reliable = top_15["Liczba_Ofert_Z_Widelkami"] >= RELIABLE_N
+    fig = go.Figure(
+        go.Bar(
+            x=top_15["Technologia_Pojedyncza"],
+            y=top_15["Mediana_Zarobkow"],
+            marker_color=np.where(reliable, "#4e79a7", "#b0b0b0"),
+            error_y={
+                "type": "data",
+                "symmetric": False,
+                "array": (top_15["ci_high"] - top_15["Mediana_Zarobkow"]).fillna(0),
+                "arrayminus": (top_15["Mediana_Zarobkow"] - top_15["ci_low"]).fillna(0),
+            },
+            customdata=top_15[
+                ["Liczba_Ofert", "Liczba_Ofert_Z_Widelkami", "Procent_Ofert_Z_Widelkami"]
+            ],
+            hovertemplate=(
+                "<b>%{x}</b><br>Mediana: %{y:,.0f}<br>Ofert: %{customdata[0]}"
+                "<br>n z widełkami: %{customdata[1]}"
+                "<br>Transparentność: %{customdata[2]:.1f}%<extra></extra>"
+            ),
+        )
+    )
+    fig.update_layout(
+        yaxis_title=f"Mediana ({unit_label})", xaxis_title="Technologia", showlegend=False
+    )
     st.plotly_chart(fig, width="stretch")
 
     # Detailed data table expander
@@ -172,6 +256,7 @@ else:
             "Mediana Zarobków",
             "Czas na Rynku",
             "Z widełkami (%)",
+            "n z widełkami",
         ]
         st.dataframe(formatted_df, width="stretch", hide_index=True)
 
@@ -241,45 +326,75 @@ with tab_bottom:
 
 # --- Salary Distributions (Tabs) ---
 st.markdown("<br>", unsafe_allow_html=True)
-st.caption(f"Widełki pokazane dla typu wynagrodzenia: **{typ_wynagrodzenia}**.")
-tab_hist, tab_box = st.tabs(["📈 Rozkład Wynagrodzeń", "📦 Zakresy Wynagrodzeń"])
-
-# Prepare data (Melt) - Plotly handles overlaid charts much better when data is in a long format
-df_wages = df_raw[["Wynagrodzenie Od", "Wynagrodzenie Do"]].melt(var_name="Typ", value_name="Kwota")
+st.header("💰 Rozkład wynagrodzeń")
+st.caption(
+    f"Typ wynagrodzenia: **{typ_wynagrodzenia}**. Analizujemy środek widełek (Od+Do)/2 - "
+    "jedną wartość na ofertę, zamiast dwóch zależnych od siebie rozkładów."
+)
+tab_hist, tab_box = st.tabs(["📈 Rozkład ogólny", "📦 Rozkład per technologia"])
 
 with tab_hist:
-    st.caption("Dystrybucja dolnych (niebieski) i górnych (czerwony) widełek płacowych.")
-
-    fig_hist = px.histogram(
-        df_wages,
-        x="Kwota",
-        color="Typ",
-        barmode="overlay",  # Overlay the bars
-        nbins=50,
-        color_discrete_map={"Wynagrodzenie Od": "#4e79a7", "Wynagrodzenie Do": "#e15759"},
-        title=f"Rozkład widełek płacowych - {typ_wynagrodzenia} (PLN)",
-        labels={"Kwota": "Kwota (PLN)"},
-    )
-    # Increase transparency to show overlapping data points
-    fig_hist.update_traces(opacity=0.75)
-    # Hide the default legend title for a cleaner UI
-    fig_hist.update_layout(legend_title_text="")
-
-    st.plotly_chart(fig_hist, width="stretch")
+    midpoints = df_raw["Srednia_Kwota"].dropna()
+    if midpoints.empty:
+        st.warning("Brak ofert z widełkami dla wybranego typu wynagrodzenia.")
+    else:
+        fig_hist = px.histogram(
+            midpoints.to_frame("Kwota"),
+            x="Kwota",
+            nbins=50,
+            title=f"Środek widełek - {typ_wynagrodzenia} (n={len(midpoints)})",
+            labels={"Kwota": f"Środek widełek ({unit_label})"},
+            color_discrete_sequence=["#4e79a7"],
+        )
+        fig_hist.add_vline(
+            x=midpoints.median(),
+            line_dash="dash",
+            annotation_text=f"mediana {midpoints.median():,.0f}",
+        )
+        fig_hist.update_layout(yaxis_title="Liczba ofert")
+        st.plotly_chart(fig_hist, width="stretch")
 
 with tab_box:
-    st.caption("Kwartyle i wartości odstające w ofertach pracy.")
-
-    fig_box = px.box(
-        df_wages,
-        x="Typ",
-        y="Kwota",
-        color="Typ",
-        color_discrete_map={"Wynagrodzenie Od": "#4e79a7", "Wynagrodzenie Do": "#e15759"},
-        title=f"Zakresy wynagrodzeń - {typ_wynagrodzenia} (PLN)",
-        labels={"Kwota": "Kwota (PLN)", "Typ": ""},
-    )
-    # Hide legend as the X-axis already describes the data types
-    fig_box.update_layout(showlegend=False)
-
-    st.plotly_chart(fig_box, width="stretch")
+    tech_counts = df_exploded.dropna(subset=["Srednia_Kwota"])[
+        "Technologia_Pojedyncza"
+    ].value_counts()
+    eligible = tech_counts[tech_counts >= min_n_salary]
+    if eligible.empty:
+        st.warning("Żadna technologia nie ma wystarczająco obserwacji płacowych (zmniejsz n).")
+    else:
+        default_techs = (
+            df_niches["Technologia_Pojedyncza"].head(8).tolist()
+            if not df_niches.empty
+            else eligible.index[:8].tolist()
+        )
+        default_techs = [t for t in default_techs if t in eligible.index]
+        chosen = st.multiselect(
+            "Technologie do porównania:", options=list(eligible.index), default=default_techs
+        )
+        if chosen:
+            subset = df_exploded[df_exploded["Technologia_Pojedyncza"].isin(chosen)].dropna(
+                subset=["Srednia_Kwota"]
+            )
+            order = list(
+                subset.groupby("Technologia_Pojedyncza")["Srednia_Kwota"]
+                .median()
+                .sort_values(ascending=False)
+                .index
+            )
+            n_labels = subset["Technologia_Pojedyncza"].value_counts()
+            fig_box = px.box(
+                subset,
+                x="Technologia_Pojedyncza",
+                y="Srednia_Kwota",
+                points="outliers",
+                category_orders={"Technologia_Pojedyncza": order},
+                labels={
+                    "Technologia_Pojedyncza": "Technologia",
+                    "Srednia_Kwota": f"Środek widełek ({unit_label})",
+                },
+                title="Rozkład wynagrodzeń per technologia (posortowane wg mediany)",
+            )
+            fig_box.update_xaxes(
+                tickvals=order, ticktext=[f"{t}<br>n={n_labels[t]}" for t in order]
+            )
+            st.plotly_chart(fig_box, width="stretch")
