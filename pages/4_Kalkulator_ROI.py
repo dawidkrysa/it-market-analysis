@@ -25,7 +25,7 @@ def _or_zero(val: float | None) -> float:
 # --- Step 1 & 2: Loading and Preparing Data ---
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def load_market_data(typ_wynagrodzenia: str) -> pd.DataFrame:
     """
     Fetch aggregated market data from the database.
@@ -44,7 +44,7 @@ def load_market_data(typ_wynagrodzenia: str) -> pd.DataFrame:
     return df_niche
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60, show_spinner=False)
 def load_data() -> pd.DataFrame:
     """
     Load bootcamp data from the database.
