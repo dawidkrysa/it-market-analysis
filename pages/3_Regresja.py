@@ -147,7 +147,7 @@ if df_niches is None or len(df_niches) < 3:
     st.stop()
 
 correlation_data = df_niches.dropna(
-    subset=["Liczba_Ofert", "Sredni_Czas_Zatrudnienia", "Mediana_Zarobkow"]
+    subset=["Liczba_Ofert", "Wzgledny_Wiek_Ogloszen", "Mediana_Zarobkow"]
 ).copy()
 correlation_data = correlation_data[
     (correlation_data["Mediana_Zarobkow"] >= min_salary)
@@ -217,14 +217,14 @@ st.caption(
     f"Policzone na {len(correlation_data)} technologiach spełniających aktualne filtry w panelu bocznym."
 )
 
-desc_source = correlation_data[["Liczba_Ofert", "Mediana_Zarobkow", "Sredni_Czas_Zatrudnienia"]]
+desc_source = correlation_data[["Liczba_Ofert", "Mediana_Zarobkow", "Wzgledny_Wiek_Ogloszen"]]
 desc_table = desc_source.agg(["mean", "median", "std", "min", "max"]).T
 desc_table["skośność"] = desc_source.skew()
 desc_table["kurtoza"] = desc_source.kurt()
 desc_table.index = [
     "Liczba Ofert",
     f"Mediana Wynagrodzeń ({jednostka_label})",
-    "Śr. Czas Aktywności Oferty (dni)",
+    "Względny wiek ogłoszeń (0-100)",
 ]
 desc_table.columns = [
     "Średnia",
@@ -301,7 +301,7 @@ fig1 = px.scatter(
     y="Mediana_Zarobkow",
     hover_data={
         "Technologia_Pojedyncza": True,
-        "Sredni_Czas_Zatrudnienia": ":.1f",
+        "Wzgledny_Wiek_Ogloszen": ":.1f",
         "Mediana_Zarobkow": ":.0f",
     },
     labels={
@@ -335,13 +335,19 @@ else:
 # ==========================================
 st.markdown("---")
 st.header("2. Czas na Rynku vs Wynagrodzenie")
+st.caption(
+    "Czas na rynku mierzymy względnie: percentyl wieku ogłoszenia w obrębie jego portalu "
+    "(50 = typowe ogłoszenie). Portale datują ogłoszenia różnie (NoFluffJobs i TheProtocol "
+    "publikują je ponownie co ok. 30 dni, JustJoinIT trzyma pierwotną datę), więc surowe dni "
+    "mierzyłyby głównie to, na jakim portalu ogłasza się dana technologia."
+)
 
 # Calculate correlations
 spearman_time, spearman_time_p = stats.spearmanr(
-    correlation_data["Sredni_Czas_Zatrudnienia"], correlation_data["Mediana_Zarobkow"]
+    correlation_data["Wzgledny_Wiek_Ogloszen"], correlation_data["Mediana_Zarobkow"]
 )
 kendall_time, kendall_time_p = stats.kendalltau(
-    correlation_data["Sredni_Czas_Zatrudnienia"], correlation_data["Mediana_Zarobkow"]
+    correlation_data["Wzgledny_Wiek_Ogloszen"], correlation_data["Mediana_Zarobkow"]
 )
 
 col3, col4 = st.columns(2)
@@ -350,7 +356,7 @@ with col3:
         "Korelacja Spearmana (ρ)",
         f"{spearman_time:.3f}",
         get_significance_label(spearman_time_p),
-        help="Sprawdza, czy im dłużej wisi oferta, tym wyższa jest mediana płac.",
+        help="Sprawdza, czy im dłużej (względnie) wiszą ogłoszenia, tym wyższa jest mediana płac.",
     )
 with col4:
     st.metric(
@@ -359,21 +365,21 @@ with col4:
 
 # Fit and display an OLS regression model
 ols_time = fit_ols(
-    correlation_data["Sredni_Czas_Zatrudnienia"], correlation_data["Mediana_Zarobkow"]
+    correlation_data["Wzgledny_Wiek_Ogloszen"], correlation_data["Mediana_Zarobkow"]
 )
 col3b, col4b, col5b = st.columns(3)
 with col3b:
     st.metric(
         "R² modelu OLS",
         f"{ols_time['r2']:.3f}",
-        help="Jaką część zmienności wynagrodzeń wyjaśnia czas aktywności oferty.",
+        help="Jaką część zmienności wynagrodzeń wyjaśnia względny wiek ogłoszeń.",
     )
 with col4b:
     st.metric(
         "Nachylenie (β)",
-        f"{ols_time['slope']:.2f} {jednostka_label}/dzień",
+        f"{ols_time['slope']:.2f} {jednostka_label}/pkt",
         get_significance_label(ols_time["slope_p"]),
-        help="O ile zmienia się mediana wynagrodzeń przy wzroście czasu aktywności o 1 dzień.",
+        help="O ile zmienia się mediana wynagrodzeń przy wzroście względnego wieku o 1 punkt percentyla.",
     )
 with col5b:
     st.metric(
@@ -382,7 +388,7 @@ with col5b:
     )
 st.caption(
     f"Model: Mediana Wynagrodzeń = {ols_time['intercept']:.1f} + "
-    f"{ols_time['slope']:.3f} × Śr. Czas Aktywności"
+    f"{ols_time['slope']:.3f} × Względny Wiek Ogłoszeń"
 )
 with st.expander("Pełne podsumowanie modelu OLS (statsmodels)"):
     st.code(ols_time["summary"])
@@ -390,11 +396,11 @@ with st.expander("Pełne podsumowanie modelu OLS (statsmodels)"):
 # Render scatter plot with trendline
 fig2 = px.scatter(
     correlation_data,
-    x="Sredni_Czas_Zatrudnienia",
+    x="Wzgledny_Wiek_Ogloszen",
     y="Mediana_Zarobkow",
     hover_data={"Technologia_Pojedyncza": True, "Liczba_Ofert": True, "Mediana_Zarobkow": ":.0f"},
     labels={
-        "Sredni_Czas_Zatrudnienia": "Średni Czas Aktywności Oferty (Dni)",
+        "Wzgledny_Wiek_Ogloszen": "Względny wiek ogłoszeń (percentyl w portalu, 0-100)",
         "Mediana_Zarobkow": f"Mediana Wynagrodzeń ({jednostka_label})",
         "Technologia_Pojedyncza": "Technologia",
     },

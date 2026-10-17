@@ -81,13 +81,16 @@ class JustJoinIT(BaseScraper):
         # Seniority
         seniority = offer.get("experienceLevel", "Junior").strip().upper()
 
-        # Dates
-        published_at = offer.get("publishedAt")
-        utworzono = (
-            datetime.fromisoformat(published_at.replace("Z", "+00:00"))
-            if published_at
-            else datetime.now()
-        )
+        # Dates. "publishedAt" is the latest refresh ("bump") of the ad, while
+        # "lastPublishedAt" holds the earlier original publication - so the posting's
+        # age is measured from the earlier of the two.
+        dates = [
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+            for value in (offer.get("publishedAt"), offer.get("lastPublishedAt"))
+            if value
+        ]
+        utworzono = min(dates) if dates else datetime.now()
+        zaktualizowano = max(dates) if dates else utworzono
 
         # Technologies
         required_skills = offer.get("requiredSkills", [])
@@ -145,7 +148,7 @@ class JustJoinIT(BaseScraper):
                     "Wynagrodzenie Godzinowe Do": wynagrodzenie_godzinowe_do,
                     "Waluta": currency,
                     "Utworzono": utworzono,
-                    "Zaktualizowano": utworzono,
+                    "Zaktualizowano": zaktualizowano,
                     "Source": self.source_name,
                 }
             )

@@ -34,6 +34,7 @@ strona_glowna = st.Page("pages/1_Home.py", title="Strona Główna", icon=":mater
 strona_konkurencji = st.Page("pages/2_Konkurencja.py", title="Radar Błękitnych Oceanów", icon=":material/troubleshoot:")
 strona_regresji = st.Page("pages/3_Regresja.py", title="Weryfikacja Statystyczna", icon=":material/analytics:")
 strona_roi = st.Page("pages/4_Kalkulator_ROI.py", title="Kalkulator ROI", icon=":material/calculate:")
+strona_firm = st.Page("pages/6_Dla_Firm.py", title="Dla Firm", icon=":material/business_center:")
 strona_metodologii = st.Page("pages/5_Metodologia.py", title="Silnik Danych", icon=":material/database:")
 
 # --- NAVIGATION GROUPING ---
@@ -42,6 +43,7 @@ pages_dict =  {
     "Wprowadzenie": [strona_glowna],
     "Analiza Rynku": [strona_konkurencji, strona_regresji],
     "Decyzje Finansowe": [strona_roi],
+    "Dla Pracodawców": [strona_firm],
 }
 
 def check_password() -> None:

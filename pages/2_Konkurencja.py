@@ -163,23 +163,24 @@ else:
     st.subheader("Mapa Nisz: popyt vs wynagrodzenie")
     st.markdown(
         "*Oś X (skala log) = liczba ofert, oś Y = mediana płac, rozmiar = liczba ofert z "
-        "widełkami (n), kolor = czas aktywności ogłoszenia. Linie przerywane to mediany "
+        "widełkami (n), kolor = względny wiek ogłoszeń (percentyl w obrębie portalu, 50 = typowe; "
+        "wyżej = ogłoszenia wiszą dłużej, czyli trudniej zrekrutować). Linie przerywane to mediany "
         "całego zestawu - lewy górny róg to kandydaci na błękitny ocean.*"
     )
-    bubble = df_niches.dropna(subset=["Mediana_Zarobkow", "Sredni_Czas_Zatrudnienia"]).copy()
-    bubble["Sredni_Czas_Zatrudnienia"] = bubble["Sredni_Czas_Zatrudnienia"].round(1)
+    bubble = df_niches.dropna(subset=["Mediana_Zarobkow", "Wzgledny_Wiek_Ogloszen"]).copy()
+    bubble["Wzgledny_Wiek_Ogloszen"] = bubble["Wzgledny_Wiek_Ogloszen"].round(0)
     fig_map = px.scatter(
         bubble,
         x="Liczba_Ofert",
         y="Mediana_Zarobkow",
         size="Liczba_Ofert_Z_Widelkami",
-        color="Sredni_Czas_Zatrudnienia",
+        color="Wzgledny_Wiek_Ogloszen",
         hover_name="Technologia_Pojedyncza",
         hover_data={
             "Procent_Ofert_Z_Widelkami": ":.1f",
             "Liczba_Ofert_Z_Widelkami": True,
             "Liczba_Ofert": True,
-            "Sredni_Czas_Zatrudnienia": ":.1f",
+            "Wzgledny_Wiek_Ogloszen": ":.0f",
         },
         log_x=True,
         color_continuous_scale="Blues",
@@ -187,7 +188,7 @@ else:
             "Liczba_Ofert": "Liczba ofert (log)",
             "Mediana_Zarobkow": f"Mediana ({unit_label})",
             "Liczba_Ofert_Z_Widelkami": "n z widełkami",
-            "Sredni_Czas_Zatrudnienia": "Czas na rynku (dni)",
+            "Wzgledny_Wiek_Ogloszen": "Względny wiek (0-100)",
             "Procent_Ofert_Z_Widelkami": "Transparentność (%)",
         },
     )
@@ -247,17 +248,19 @@ else:
         formatted_df["Mediana_Zarobkow"] = formatted_df["Mediana_Zarobkow"].apply(
             lambda x: f"{x:,.2f} PLN".replace(",", " ") if pd.notnull(x) else "Brak"
         )
-        formatted_df["Sredni_Czas_Zatrudnienia"] = formatted_df["Sredni_Czas_Zatrudnienia"].apply(
-            lambda x: f"{x:.0f} dni" if pd.notnull(x) else "Brak"
+        formatted_df["Wzgledny_Wiek_Ogloszen"] = formatted_df["Wzgledny_Wiek_Ogloszen"].apply(
+            lambda x: f"{x:.0f} / 100" if pd.notnull(x) else "Brak"
         )
-        formatted_df.columns = [
-            "Technologia",
-            "Liczba Ofert",
-            "Mediana Zarobków",
-            "Czas na Rynku",
-            "Z widełkami (%)",
-            "n z widełkami",
-        ]
+        formatted_df = formatted_df.rename(
+            columns={
+                "Technologia_Pojedyncza": "Technologia",
+                "Liczba_Ofert": "Liczba Ofert",
+                "Mediana_Zarobkow": "Mediana Zarobków",
+                "Wzgledny_Wiek_Ogloszen": "Względny wiek ogłoszeń",
+                "Procent_Ofert_Z_Widelkami": "Z widełkami (%)",
+                "Liczba_Ofert_Z_Widelkami": "n z widełkami",
+            }
+        )
         st.dataframe(formatted_df, width="stretch", hide_index=True)
 
 # --- General Market Overview ---
