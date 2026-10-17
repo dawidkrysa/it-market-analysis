@@ -11,7 +11,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils.db_handler import SALARY_TYPE_COLUMNS, DatabaseHandler
+from utils.charts import palette
+from utils.db_handler import DatabaseHandler
+from utils.ui import salary_type_selector
 
 BOOTSTRAP_RESAMPLES = 2000
 RELIABLE_N = 10  # below this many salary observations a median is flagged as shaky
@@ -39,7 +41,7 @@ def bootstrap_median_ci(values: np.ndarray, alpha: float = 0.05) -> tuple[float,
 
 
 # --- Header and Description ---
-st.title("Strategia Błękitnego Oceanu ")
+st.title("Strategia Błękitnego Oceanu")
 
 st.markdown("""
 **Odkryj ukryty potencjał polskiego rynku IT.** Ten moduł służy do identyfikacji tzw. "błękitnych oceanów" – wysokopłatnych i deficytowych technologii, które są często pomijane w standardowych bootcampach. 
@@ -51,18 +53,8 @@ st.info(
     "**Wskazówka:** Użyj suwaków w panelu bocznym, aby zdefiniować własne ramy dla wielkości niszy rynkowej."
 )
 
-# --- Sidebar: Salary type selector ---
-st.sidebar.markdown("### Typ wynagrodzenia")
-typ_wynagrodzenia = st.sidebar.selectbox(
-    "Widełki do analizy:",
-    options=list(SALARY_TYPE_COLUMNS.keys()),
-    help=(
-        "Każda oferta może mieć kilka wariantów wynagrodzenia naraz "
-        "(UoP, B2B, stawka godzinowa) — wybierz, który ma być porównywany."
-    ),
-)
-
-unit_label = "PLN/h" if typ_wynagrodzenia == "Stawka godzinowa" else "PLN"
+typ_wynagrodzenia, unit_label = salary_type_selector()
+pal = palette()
 
 # --- Sidebar: User-defined parameters for niche sizing ---
 st.sidebar.markdown("### Parametry Niszy")
@@ -143,6 +135,9 @@ else:
     col3.metric(
         "Mediana zarobków",
         f"{df_niches.iloc[0]['Mediana_Zarobkow']:,.0f} {unit_label}".replace(",", " "),
+        delta=f"n = {int(df_niches.iloc[0]['Liczba_Ofert_Z_Widelkami'])}",
+        delta_color="off",
+        delta_arrow="off",
         help=(
             f"Policzona z {int(df_niches.iloc[0]['Liczba_Ofert_Z_Widelkami'])} ofert z widełkami. "
             "Lider to nisza o najwyższej medianie - przy małym n sprawdź jej przedział ufności "
@@ -191,7 +186,6 @@ else:
             "Wzgledny_Wiek_Ogloszen": ":.0f",
         },
         log_x=True,
-        color_continuous_scale="Blues",
         labels={
             "Liczba_Ofert": "Liczba ofert (log)",
             "Mediana_Zarobkow": f"Mediana ({unit_label})",
@@ -228,7 +222,7 @@ else:
         go.Bar(
             x=top_15["Technologia_Pojedyncza"],
             y=top_15["Mediana_Zarobkow"],
-            marker_color=np.where(reliable, "#4e79a7", "#b0b0b0"),
+            marker_color=np.where(reliable, pal.accent, pal.neutral),
             error_y={
                 "type": "data",
                 "symmetric": False,
@@ -295,8 +289,7 @@ with tab_top:
         x="Liczba Ofert",
         y="Technologia",
         orientation="h",
-        color="Liczba Ofert",
-        color_continuous_scale="viridis",
+        color_discrete_sequence=[pal.accent],
         title="Top 20 Najpopularniejszych Technologii",
     )
     # Sort so the most popular technology is at the top and hide the color scale
@@ -326,8 +319,7 @@ with tab_bottom:
             x="Liczba Ofert",
             y="Technologia",
             orientation="h",
-            color="Liczba Ofert",
-            color_continuous_scale="magma",
+            color_discrete_sequence=[pal.accent],
             title=f"Top 20 Najrzadszych Technologii ({min_jobs}-{max_jobs} ofert)",
         )
         fig_tech_bottom.update_layout(
@@ -355,7 +347,7 @@ with tab_hist:
             nbins=50,
             title=f"Środek widełek - {typ_wynagrodzenia} (n={len(midpoints)})",
             labels={"Kwota": f"Środek widełek ({unit_label})"},
-            color_discrete_sequence=["#4e79a7"],
+            color_discrete_sequence=[pal.accent],
         )
         fig_hist.add_vline(
             x=midpoints.median(),

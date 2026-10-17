@@ -1,3 +1,11 @@
 [client]
 showErrorDetails = false
 toolbarMode = "viewer"
+
+# Accent from the shared chart palette (utils/charts.py). Separate light/dark
+# sections keep the viewer's light/dark choice instead of pinning one base theme.
+[theme.light]
+primaryColor = "#2a78d6"
+
+[theme.dark]
+primaryColor = "#3987e5"

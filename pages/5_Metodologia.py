@@ -14,6 +14,7 @@ import streamlit as st
 
 from config.settings import Settings
 from scrapers.scrape_job import run_scrape_job
+from utils.charts import palette
 from utils.db_handler import DatabaseHandler
 
 LOCAL_TZ = ZoneInfo("Europe/Warsaw")
@@ -156,7 +157,7 @@ with tab_status:
                     .value_counts()
                     .head(15)
                 )
-                st.bar_chart(tech_counts, color="#4e79a7")
+                st.bar_chart(tech_counts, color=palette().accent)
         except Exception as e:
             st.error(f"Błąd generowania podsumowania: {e}")
 
