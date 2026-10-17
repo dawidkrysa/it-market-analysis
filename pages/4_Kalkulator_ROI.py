@@ -144,6 +144,12 @@ with calc_container:
         help="Domyślna wartość opiera się na medianie zarobków w bazie danych dla tej konkretnej technologii.",
     )
 
+    if typ_wynagrodzenia.startswith("UoP"):
+        st.caption(
+            "Kwoty UoP są brutto - na rękę zostaje zwykle ok. 70-73%. Wpisz kwotę netto, "
+            "jeśli chcesz realistyczny czas zwrotu."
+        )
+
     # Retrieve and clean selected data values
     try:
         if wybrana_technologia:
@@ -167,15 +173,19 @@ with calc_container:
             # Total investment cost calculation
             calkowity_koszt = koszt_bootcampu + koszt_utrzymania_okres_przejsciowy
 
-            # Total projected revenue
-            calkowity_przychod = czas_przepracowany_msc * szacowane_zarobki
+            # Living costs don't stop once the job starts, so only the monthly
+            # surplus over living costs can pay the investment back.
+            miesieczna_nadwyzka = szacowane_zarobki - koszt_zycia_msc
+
+            # Total surplus earned over the simulated employment period
+            calkowity_przychod = czas_przepracowany_msc * miesieczna_nadwyzka
 
             # Final financial balance
             bilans = calkowity_przychod - calkowity_koszt
 
             # Break-even point in months
             miesiace_do_zwrotu = (
-                calkowity_koszt / szacowane_zarobki if szacowane_zarobki > 0 else float("inf")
+                calkowity_koszt / miesieczna_nadwyzka if miesieczna_nadwyzka > 0 else float("inf")
             )
 
             # ---------------------------------------------------------
@@ -194,7 +204,7 @@ with calc_container:
                 )
             with mcol2:
                 st.metric(
-                    f"Przychód ({czas_przepracowany_msc:.0f} mies.)",
+                    f"Nadwyżka po kosztach życia ({czas_przepracowany_msc:.0f} mies.)",
                     f"{calkowity_przychod:,.2f} PLN".replace(",", " "),
                 )
             with mcol3:
@@ -206,7 +216,12 @@ with calc_container:
                 )
 
             st.subheader("Czas Zwrotu z Inwestycji (ROI)")
-            if miesiace_do_zwrotu <= czas_przepracowany_msc:
+            if miesieczna_nadwyzka <= 0:
+                st.error(
+                    "Szacowane zarobki nie pokrywają miesięcznych kosztów życia - "
+                    "inwestycja się nie zwróci."
+                )
+            elif miesiace_do_zwrotu <= czas_przepracowany_msc:
                 st.success(
                     f"Inwestycja całkowicie się zwróci po około **{miesiace_do_zwrotu:.1f}** miesiącach pracy na nowym stanowisku."
                 )

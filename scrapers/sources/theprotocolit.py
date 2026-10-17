@@ -149,7 +149,12 @@ class TheProtocolIT(BaseScraper):
             waluta = "PLN"
             kind_name = (salary.get("kindName") or "").lower()
             unit_name = (salary.get("timeUnit") or {}).get("longForm", "").lower()
-            if "godz" in unit_name or "hour" in unit_name:
+            is_monthly = "mies" in unit_name or "month" in unit_name
+            if not is_monthly and not ("godz" in unit_name or "hour" in unit_name):
+                # Unknown period (e.g. daily) - no safe conversion, so skip it rather
+                # than mixing it into the monthly or hourly bucket.
+                continue
+            if not is_monthly:
                 if wynagrodzenie_godzinowe_od is None and wynagrodzenie_godzinowe_do is None:
                     wynagrodzenie_godzinowe_od, wynagrodzenie_godzinowe_do = amount_from, amount_to
             elif "brutto" in kind_name or "gross" in kind_name:
