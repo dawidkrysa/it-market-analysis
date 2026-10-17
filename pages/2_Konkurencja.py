@@ -39,7 +39,7 @@ def bootstrap_median_ci(values: np.ndarray, alpha: float = 0.05) -> tuple[float,
 
 
 # --- Header and Description ---
-st.title("Strategia Błękitnego Oceanu 🌊")
+st.title("Strategia Błękitnego Oceanu ")
 
 st.markdown("""
 **Odkryj ukryty potencjał polskiego rynku IT.** Ten moduł służy do identyfikacji tzw. "błękitnych oceanów" – wysokopłatnych i deficytowych technologii, które są często pomijane w standardowych bootcampach. 
@@ -48,7 +48,7 @@ Zamiast konkurować w przesyconych obszarach, zoptymalizuj ścieżkę kariery ba
 """)
 
 st.info(
-    "💡 **Wskazówka:** Użyj suwaków w panelu bocznym, aby zdefiniować własne ramy dla wielkości niszy rynkowej."
+    "**Wskazówka:** Użyj suwaków w panelu bocznym, aby zdefiniować własne ramy dla wielkości niszy rynkowej."
 )
 
 # --- Sidebar: Salary type selector ---
@@ -110,7 +110,7 @@ def get_db_handler() -> DatabaseHandler:
 try:
     db = get_db_handler()
 except Exception as e:
-    st.error(f"❌ Błąd połączenia: {e}")
+    st.error(f"Błąd połączenia: {e}")
     st.stop()
 
 # --- Data Processing: Download and analyze data with a loading spinner ---
@@ -126,37 +126,37 @@ with st.spinner("Przetwarzanie tysięcy ofert pracy... "):
         else:
             df_niches = pd.DataFrame()
     except Exception as e:
-        st.error(f"❌ Błąd: {e}")
+        st.error(f"Błąd: {e}")
         st.stop()
 
 # --- Results Presentation ---
 if df_niches is None or df_niches.empty:
     st.warning(
-        f"⚠️ Brak technologii spełniających kryterium {min_jobs} - {max_jobs} ofert. Zmień parametry."
+        f"Brak technologii spełniających kryterium {min_jobs} - {max_jobs} ofert. Zmień parametry."
     )
 else:
     # KPI Metrics
-    st.markdown("### 🏆 Lider Zestawienia")
+    st.markdown("### Lider Zestawienia")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Zidentyfikowane nisze", len(df_niches))
     col2.metric("Najlepsza technologia", df_niches.iloc[0]["Technologia_Pojedyncza"].title())
     col3.metric("Mediana zarobków", f"{df_niches.iloc[0]['Mediana_Zarobkow']:,.0f} PLN")
 
     top_transparency = df_niches.iloc[0]["Procent_Ofert_Z_Widelkami"]
-    transparency_emoji = (
-        "🟢" if top_transparency >= 50 else ("🟡" if top_transparency >= 25 else "🔴")
+    transparency_label = (
+        "wysoka" if top_transparency >= 50 else ("średnia" if top_transparency >= 25 else "niska")
     )
     col4.metric(
         "Transparentność danych",
-        f"{transparency_emoji} {top_transparency:.1f}%",
-        help="🟢≥50% 🟡≥25% 🔴<25%",
+        f"{transparency_label} ({top_transparency:.1f}%)",
+        help="wysoka ≥50%, średnia ≥25%, niska <25%",
     )
 
     # Warning for low data quality (low salary transparency)
     low_quality_niches = df_niches[df_niches["Procent_Ofert_Z_Widelkami"] < 25]
     if len(low_quality_niches) > 0:
         st.warning(
-            f"⚠️ {len(low_quality_niches)} z {len(df_niches)} nisz ma niską transparentność płacową (<25%). Ich mediany mogą być zawyżone."
+            f"{len(low_quality_niches)} z {len(df_niches)} nisz ma niską transparentność płacową (<25%). Ich mediany mogą być zawyżone."
         )
 
     st.markdown("---")
@@ -262,13 +262,13 @@ else:
 
 # --- General Market Overview ---
 st.markdown("---")
-st.header("📊 Ogólny przegląd rynku IT")
+st.header("Ogólny przegląd rynku IT")
 
 st.subheader("Popularność technologii w ofertach pracy")
 
 # Create tabs for technology popularity sections
 tab_top, tab_bottom = st.tabs(
-    ["🔥 Główne Technologie (Czerwony Ocean)", "🧊 Rzadkie Technologie (Nisze)"]
+    ["Główne Technologie (Czerwony Ocean)", "Rzadkie Technologie (Nisze)"]
 )
 
 with tab_top:
@@ -326,12 +326,12 @@ with tab_bottom:
 
 # --- Salary Distributions (Tabs) ---
 st.markdown("<br>", unsafe_allow_html=True)
-st.header("💰 Rozkład wynagrodzeń")
+st.header("Rozkład wynagrodzeń")
 st.caption(
     f"Typ wynagrodzenia: **{typ_wynagrodzenia}**. Analizujemy środek widełek (Od+Do)/2 - "
     "jedną wartość na ofertę, zamiast dwóch zależnych od siebie rozkładów."
 )
-tab_hist, tab_box = st.tabs(["📈 Rozkład ogólny", "📦 Rozkład per technologia"])
+tab_hist, tab_box = st.tabs(["Rozkład ogólny", "Rozkład per technologia"])
 
 with tab_hist:
     midpoints = df_raw["Srednia_Kwota"].dropna()

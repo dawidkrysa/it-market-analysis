@@ -55,16 +55,16 @@ def check_password() -> None:
         st.session_state.is_admin = True
         st.session_state.pwd_input = "" # Clear the input field upon successful authentication
     else:
-        st.error("❌ Błędny kod dostępu")
+        st.error("Błędny kod dostępu")
 
 # --- GLOBAL SIDEBAR ---
 with st.sidebar:
-    st.caption("🧭 **Radar Mikro-Nisz IT v1.0**")
+    st.caption("**Radar Mikro-Nisz IT v1.0**")
     st.markdown("---")
 
     # Display the login expander only if the user is not authenticated
     if not st.session_state.is_admin:
-        with st.expander("🔐 Panel Dostępu"):
+        with st.expander("Panel Dostępu"):
             st.text_input(
                 "Kod dostępu",
                 type="password",
@@ -73,12 +73,12 @@ with st.sidebar:
             )
     else:
         # Display admin status and logout option
-        st.success("🔓 Tryb Admina aktywny")
+        st.success("Tryb Admina aktywny")
         if st.button("Wyloguj"):
             st.session_state.is_admin = False
             st.rerun()
 
-    st.info("💡 Wybierz moduł z menu powyżej, aby rozpocząć analizę danych z rynku.")
+    st.info("Wybierz moduł z menu powyżej, aby rozpocząć analizę danych z rynku.")
 
     # Placeholder for potential global filters in the future (e.g., "Select City")
 

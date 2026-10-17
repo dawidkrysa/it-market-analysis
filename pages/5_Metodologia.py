@@ -14,9 +14,9 @@ import streamlit as st
 from scrapers.scraper_manager import ScraperManager
 from utils.db_handler import DatabaseHandler
 
-st.set_page_config(page_title="Zarządzanie Danymi", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="Zarządzanie Danymi", page_icon=":material/database:", layout="wide")
 
-st.title("⚙️ Ekstrakcja i Zarządzanie Danymi")
+st.title("Ekstrakcja i Zarządzanie Danymi")
 st.markdown("""
 Ta sekcja to centrum dowodzenia silnika danych aplikacji **Radar Mikro-Nisz**. 
 Pozwala na ręczne uruchamianie procesu web scrapingu, monitorowanie stanu bazy oraz podgląd surowych rekordów z rynkowych portali pracy.
@@ -43,12 +43,12 @@ try:
     db_handler = get_db_handler()
     record_count = db_handler.get_record_count()
 except Exception as e:
-    st.error(f"❌ Nie można połączyć się z bazą danych: {e}")
+    st.error(f"Nie można połączyć się z bazą danych: {e}")
     st.stop()
 
 
 # --- Helper Function: Native Streamlit Modal Dialog ---
-@st.dialog("⚠️ Potwierdzenie czyszczenia bazy")
+@st.dialog("Potwierdzenie czyszczenia bazy")
 def confirm_clear_database() -> None:
     """
     Render a modal dialog to confirm the database deletion operation.
@@ -63,7 +63,7 @@ def confirm_clear_database() -> None:
     if col1.button("Tak, usuń wszystko", type="primary", width="stretch"):
         try:
             deleted_count = db_handler.clear_database()
-            st.session_state.action_msg = f"✅ Pomyślnie usunięto {deleted_count} rekordów!"
+            st.session_state.action_msg = f"Pomyślnie usunięto {deleted_count} rekordów!"
             st.rerun()
         except Exception as e:
             st.error(f"Błąd podczas czyszczenia bazy: {e}")
@@ -81,11 +81,11 @@ if "action_msg" in st.session_state:
 # --- Tabs ---
 tab_status, tab_fetch, tab_view, tab_bootcamps, tab_clear = st.tabs(
     [
-        "📊 Status bazy",
-        "⬇️ Pobieranie danych",
-        "📋 Przeglądarka danych",
-        "🎓 Bootcampy",
-        "🗑️ Czyszczenie bazy",
+        "Status bazy",
+        "Pobieranie danych",
+        "Przeglądarka danych",
+        "Bootcampy",
+        "Czyszczenie bazy",
     ]
 )
 
@@ -97,7 +97,7 @@ with tab_status:
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Liczba zebranych ofert", f"{record_count:,}".replace(",", " "))
-    col2.metric("Status Bazy", "🟢 Aktywna" if record_count > 0 else "🔴 Pusta")
+    col2.metric("Status Bazy", "Aktywna" if record_count > 0 else "Pusta")
     col3.metric("Ostatnia aktualizacja", "Dziś" if record_count > 0 else "Brak")
 
     if record_count > 0:
@@ -142,7 +142,7 @@ with tab_fetch:
         default=["Junior", "Mid", "Senior"],
     )
 
-    if st.button("🚀 Rozpocznij Scraping Danych", type="primary", disabled=not selected_labels):
+    if st.button("Rozpocznij Scraping Danych", type="primary", disabled=not selected_labels):
         progress_bar = st.progress(0, text="Inicjalizacja scraperów...")
         status_box = st.info("Uruchamianie silnika...")
 
@@ -163,10 +163,10 @@ with tab_fetch:
             if all_jobs:
                 saved_count = db_handler.save_jobs(all_jobs)
                 st.session_state.action_msg = (
-                    f"✅ Sukces! Pomyślnie zeskrapowano i zapisano {saved_count} nowych ofert."
+                    f"Sukces! Pomyślnie zeskrapowano i zapisano {saved_count} nowych ofert."
                 )
             else:
-                st.session_state.action_msg = "⚠️ Scraper zakończył pracę, ale nie znalazł nowych ofert pasujących do kryteriów."
+                st.session_state.action_msg = "Scraper zakończył pracę, ale nie znalazł nowych ofert pasujących do kryteriów."
 
             progress_bar.progress(100, text="Zakończono!")
             time.sleep(1)
@@ -174,7 +174,7 @@ with tab_fetch:
 
         except Exception as e:
             progress_bar.empty()
-            status_box.error(f"❌ Krytyczny błąd scrapera: {e}")
+            status_box.error(f"Krytyczny błąd scrapera: {e}")
 
 # ==========================================
 # TAB 3: Data Viewer
@@ -239,7 +239,7 @@ with tab_bootcamps:
         "Edytuj ręcznie poniżej albo wgraj plik, żeby zastąpić lub uzupełnić katalog."
     )
 
-    with st.expander("📤 Import z pliku (CSV / XLSX)"):
+    with st.expander("Import z pliku (CSV / XLSX)"):
         uploaded_file = st.file_uploader(
             "Plik z kolumnami: Technologia, Średni Koszt, Mediana Kosztu, "
             "Średni Czas (dni), Mediana Czasu (dni)",
@@ -266,14 +266,14 @@ with tab_bootcamps:
                         )
                     saved_count = db_handler.save_bootcamps(df_import)
                     st.session_state.action_msg = (
-                        f"✅ Zaimportowano i zapisano {saved_count} wierszy bootcampów."
+                        f"Zaimportowano i zapisano {saved_count} wierszy bootcampów."
                     )
                     st.rerun()
             except Exception as e:
-                st.error(f"❌ Błąd importu pliku: {e}")
+                st.error(f"Błąd importu pliku: {e}")
 
     st.markdown("---")
-    st.markdown("### ✏️ Edytuj ręcznie")
+    st.markdown("### Edytuj ręcznie")
     st.caption(
         "Kliknij dwukrotnie komórkę, aby zmienić jej wartość. Dodawaj/usuwaj wiersze "
         "paskiem narzędzi tabeli, a na końcu zapisz zmiany."
@@ -287,13 +287,13 @@ with tab_bootcamps:
         key="bootcamp_admin_editor",
     )
 
-    if st.button("💾 Zapisz zmiany", type="primary"):
+    if st.button("Zapisz zmiany", type="primary"):
         try:
             saved_count = db_handler.save_bootcamps(edited_bootcamps)
-            st.session_state.action_msg = f"✅ Zapisano {saved_count} wierszy bootcampów."
+            st.session_state.action_msg = f"Zapisano {saved_count} wierszy bootcampów."
             st.rerun()
         except Exception as e:
-            st.error(f"❌ Błąd zapisu: {e}")
+            st.error(f"Błąd zapisu: {e}")
 
 # ==========================================
 # TAB 5: Clear Database
@@ -302,12 +302,12 @@ with tab_clear:
     st.subheader("Opcje Administracyjne")
 
     st.error("""
-    **⚠️ Strefa Niebezpieczna**
+    **Strefa Niebezpieczna**
     Poniższa operacja usunie wszystkie zebrane oferty pracy z bazy. Zrób to tylko, jeśli:
     * Chcesz zebrać świeże dane z rynku (stare oferty wygasły).
     * Testujesz aplikację i chcesz wyczyścić bazę.
     """)
 
     # Trigger the native Streamlit modal dialog function
-    if st.button("🗑️ Wyczyść całą bazę danych", type="primary", disabled=(record_count == 0)):
+    if st.button("Wyczyść całą bazę danych", type="primary", disabled=(record_count == 0)):
         confirm_clear_database()

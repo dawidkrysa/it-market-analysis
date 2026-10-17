@@ -91,7 +91,7 @@ st.divider()
 # --- Calculator Engine (Rendered in the top container) ---
 
 with calc_container:
-    st.header("Kalkulator ROI (Zwrotu z Inwestycji) 💰")
+    st.header("Kalkulator ROI (Zwrotu z Inwestycji) ")
 
     # User input parameters for ROI calculation
     col1, col2 = st.columns(2)
@@ -105,7 +105,7 @@ with calc_container:
         if df_bootcamp.empty:
             st.caption(
                 "Brak danych o bootcampach - dodaj je w panelu administracyjnym "
-                "(Silnik Danych → 🎓 Bootcampy)."
+                "(Silnik Danych → Bootcampy)."
             )
     with col2:
         czas_przepracowany_msc = st.number_input(
