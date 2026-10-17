@@ -215,7 +215,7 @@ def _aggregate_niche_metrics(df: pd.DataFrame) -> pd.DataFrame:
     Calculated KPIs include:
     - Total volume of offers.
     - Median salary (derived strictly from explicitly stated salary bands).
-    - Average market exposure time.
+    - Relative posting age (median within-portal age percentile).
     - Percentage of offers providing transparent salary data.
 
     Args:
@@ -232,7 +232,9 @@ def _aggregate_niche_metrics(df: pd.DataFrame) -> pd.DataFrame:
                 "Srednia_Kwota",
                 lambda x: x.dropna().median() if x.notna().any() else None,
             ),
-            Sredni_Czas_Zatrudnienia=("Czas_Na_Rynku_Dni", "mean"),
+            # Median within-portal age percentile: 50 = typical, higher = ads stay
+            # up longer (proxy for harder to hire). Comparable across portal mixes.
+            Wzgledny_Wiek_Ogloszen=("Wzgledny_Wiek_Pct", "median"),
             Procent_Ofert_Z_Widelkami=(
                 "Ma_Realne_Wynagrodzenie",
                 lambda x: (x.sum() / len(x) * 100).round(1),
@@ -252,13 +254,22 @@ def _calculate_market_time(df: pd.DataFrame) -> pd.DataFrame:
         df (pd.DataFrame): DataFrame containing job postings.
 
     Returns:
-        pd.DataFrame: DataFrame augmented with a 'Czas_Na_Rynku_Dni' column.
+        pd.DataFrame: DataFrame augmented with 'Czas_Na_Rynku_Dni' (raw age in days)
+            and 'Wzgledny_Wiek_Pct' (age percentile within the ad's portal).
     """
     df["Utworzono"] = pd.to_datetime(df["Utworzono"], utc=True)
     df["Scraped At"] = pd.to_datetime(df["Scraped At"], utc=True)
 
     # Calculate timedelta in days (missing dates will yield NaN)
     df["Czas_Na_Rynku_Dni"] = (df["Scraped At"] - df["Utworzono"]).dt.days
+
+    # Portals date ads differently (NoFluffJobs/TheProtocol re-publish roughly every
+    # 30 days with a new date, JustJoinIT keeps the original), so raw days aren't
+    # comparable across portals. The age percentile within the ad's own portal is:
+    # 50 = a typical ad on that portal, higher = up longer than most.
+    df["Wzgledny_Wiek_Pct"] = (
+        df.groupby("Source")["Czas_Na_Rynku_Dni"].rank(pct=True).mul(100)
+    )
 
     return df
 
@@ -899,7 +910,7 @@ class DatabaseHandler:
             & (df["Liczba_Ofert"] <= max_jobs)
             & (df["Procent_Ofert_Z_Widelkami"] >= self.MIN_SALARY_TRANSPARENCY_PERCENT)
         ].sort_values(
-            by=["Mediana_Zarobkow", "Procent_Ofert_Z_Widelkami", "Sredni_Czas_Zatrudnienia"],
+            by=["Mediana_Zarobkow", "Procent_Ofert_Z_Widelkami", "Wzgledny_Wiek_Ogloszen"],
             ascending=[False, False, True],
         )
 
@@ -923,7 +934,7 @@ class DatabaseHandler:
                 - Technologia_Pojedyncza: Single technology identifier.
                 - Liczba_Ofert: Total volume of associated postings.
                 - Mediana_Zarobkow: Calculated median salary.
-                - Sredni_Czas_Zatrudnienia: Average posting age (in days).
+                - Wzgledny_Wiek_Ogloszen: Median within-portal posting-age percentile.
                 - Procent_Ofert_Z_Widelkami: Salary transparency metric (0-100%).
         """
         jobs_data = self.get_all_jobs()

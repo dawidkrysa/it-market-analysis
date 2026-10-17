@@ -207,14 +207,9 @@ with tab_hard:
         "ogłoszenie, wyżej = wisi dłużej niż większość). To przybliżenie trudności rekrutacji - nie "
         "wiemy, kiedy ogłoszenie faktycznie zakończyło się zatrudnieniem."
     )
-    # Within-portal age percentile, so the portal mix of a technology doesn't bias it.
-    age_pct = (
-        market.dropna(subset=["Czas_Na_Rynku_Dni"])
-        .groupby("Source")["Czas_Na_Rynku_Dni"]
-        .rank(pct=True)
-        .mul(100)
-    )
-    age_pct_by_id = pd.Series(age_pct.values, index=market.loc[age_pct.index, "ID"].values)
+    # Within-portal age percentile (computed in the shared pipeline), so the portal
+    # mix of a technology doesn't bias it.
+    age_pct = market["Wzgledny_Wiek_Pct"].dropna()
     pct_tech = age_pct.loc[age_pct.index.intersection(offers.index)]
     n_companies = offers["Firma"].nunique()
 
@@ -260,10 +255,11 @@ with tab_hard:
         key="min_n_age",
         help="Odrzuca rzadkie technologie, których mediana byłaby przypadkowa.",
     )
-    tech_age = market_tech.assign(Wiek_Pct=market_tech["ID"].map(age_pct_by_id)).dropna(
-        subset=["Wiek_Pct"]
+    ages = (
+        market_tech.dropna(subset=["Wzgledny_Wiek_Pct"])
+        .groupby("Technologia_Pojedyncza")["Wzgledny_Wiek_Pct"]
+        .agg(n="count", Mediana="median")
     )
-    ages = tech_age.groupby("Technologia_Pojedyncza")["Wiek_Pct"].agg(n="count", Mediana="median")
     ages = ages[ages["n"] >= min_n_age].sort_values("Mediana", ascending=False).head(20)
     if ages.empty:
         st.info("Brak technologii spełniających próg liczby ofert.")
