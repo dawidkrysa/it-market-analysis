@@ -27,13 +27,22 @@ class JustJoinIT(BaseScraper):
             List of raw job data dictionaries.
         """
         levels = [lvl.strip() for lvl in experience_levels.split(",") if lvl.strip()]
-        params = {"experienceLevels": levels, "itemsCount": 1500}
-        logger.info(f"Fetching jobs from {self.API_URL}")
-        response = requests.get(self.API_URL, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        offers = data.get("data", [])
+        # One paginated pass per level: the API caps a single result set at 10 000
+        # items, and the "from" cursor walks through it page by page.
+        offers: list[dict[str, Any]] = []
+        for level in levels:
+            cursor: int | None = 0
+            while cursor is not None:
+                params = {"experienceLevels": level, "itemsCount": 100, "from": cursor}
+                logger.info(f"Fetching jobs from {self.API_URL} ({level}, from={cursor})")
+                response = requests.get(self.API_URL, params=params, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                page = data.get("data", [])
+                offers.extend(page)
+                cursor = data.get("meta", {}).get("next", {}).get("cursor")
+                if not page:
+                    break
         logger.info(f"Received {len(offers)} job offers from API")
         return offers
 
@@ -93,7 +102,8 @@ class JustJoinIT(BaseScraper):
         wynagrodzenie_b2b_od = wynagrodzenie_b2b_do = None
         wynagrodzenie_godzinowe_od = wynagrodzenie_godzinowe_do = None
         for emp in offer.get("employmentTypes", []):
-            if emp.get("currencySource") != "original":
+            # Only original PLN figures: other currencies would skew PLN medians.
+            if emp.get("currencySource") != "original" or emp.get("currency") != "PLN":
                 continue
             amount_from, amount_to = emp.get("fromPerUnit"), emp.get("toPerUnit")
             if amount_from is None and amount_to is None:
