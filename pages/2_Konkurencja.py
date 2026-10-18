@@ -121,6 +121,10 @@ with st.spinner("Przetwarzanie tysięcy ofert pracy... "):
         st.error(f"Błąd: {e}")
         st.stop()
 
+if df_raw.empty or df_exploded.empty:
+    st.warning("Baza danych jest pusta - uruchom scraping w panelu administracyjnym.")
+    st.stop()
+
 # --- Results Presentation ---
 if df_niches is None or df_niches.empty:
     st.warning(

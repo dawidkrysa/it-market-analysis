@@ -25,15 +25,15 @@ COPY . .
 # Create logs and set ownership
 RUN mkdir -p /app/logs && chown -R appuser:appuser /app
 
-# Switch to non-root user BEFORE installing Playwright browsers
 USER appuser
 
-# Expose the Streamlit port
+# Hosting platforms (e.g. Railway) inject the port to listen on via $PORT;
+# locally it falls back to 8501.
+ENV PORT=8501     PYTHONUNBUFFERED=1     PYTHONDONTWRITEBYTECODE=1
 EXPOSE 8501
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3     CMD curl -f "http://localhost:${PORT}/_stcore/health" || exit 1
 
-# Start the Streamlit server
-CMD ["streamlit", "run", "app.py"]
+# Default command: the web app. The scraper job reuses this image with
+# "python -m scrapers.run_once" (cron) or "python -m scrapers.scheduler" (compose).
+CMD streamlit run app.py     --server.port="${PORT}"     --server.address=0.0.0.0     --server.headless=true     --browser.gatherUsageStats=false

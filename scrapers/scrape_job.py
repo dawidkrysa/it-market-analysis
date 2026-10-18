@@ -7,9 +7,11 @@ sure a manual run and a scheduled run never scrape (and write) at the same time.
 
 import logging
 from dataclasses import dataclass
+from datetime import timedelta
 
 from sqlalchemy import text
 
+from config.settings import Settings
 from scrapers.scraper_manager import ScraperManager
 from utils.db_handler import DatabaseHandler
 
@@ -58,6 +60,10 @@ def run_scrape_job(trigger: str, experience_levels: str) -> ScrapeResult:
             saved = db.save_jobs(jobs) if jobs else 0
             db.finish_scrape_run(run_id, "success", saved_count=saved)
             logger.info("Scrape run %s finished: %s postings saved", run_id, saved)
+            # Only prune after a successful run, so a broken scrape never wipes the data.
+            if saved and Settings.SCRAPE_RETENTION_DAYS > 0:
+                pruned = db.delete_stale_jobs(timedelta(days=Settings.SCRAPE_RETENTION_DAYS))
+                logger.info("Pruned %s postings not seen for %s days", pruned, Settings.SCRAPE_RETENTION_DAYS)
             return ScrapeResult(status="success", saved_count=saved)
         except Exception as e:
             db.finish_scrape_run(run_id, "failed", error=str(e))

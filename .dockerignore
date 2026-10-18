@@ -42,3 +42,9 @@ notebooks/
 
 # Test data / examples (Optional)
 examples/
+# Local tooling and notes that don't belong in the image
+.claude/
+.devcontainer/
+.ruff_cache/
+CLAUDE.md
+RAPORT_WNIOSKI.md

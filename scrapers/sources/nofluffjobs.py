@@ -83,7 +83,15 @@ class NoFluffJobs(BaseScraper):
         """
 
         parsed_jobs = []
+        # The search API returns the same offer once per region (e.g. "...-lodz",
+        # "...-lublin"), all sharing one "reference": keep a single copy.
+        seen_references: set[str] = set()
         for offer in raw_data:
+            reference = offer.get("reference")
+            if reference:
+                if reference in seen_references:
+                    continue
+                seen_references.add(reference)
             try:
                 parsed_jobs.extend(self._parse_single_offer(offer))
             except Exception as e:
@@ -152,7 +160,8 @@ class NoFluffJobs(BaseScraper):
                 continue
             results.append(
                 {
-                    "ID": base_slug,
+                    # Stable across runs (the regional copy kept first can vary).
+                    "ID": f"nfj-{offer['reference']}" if offer.get("reference") else base_slug,
                     "Stanowisko": offer.get("title", ""),
                     "Firma": offer.get("name", ""),
                     "Poziom": seniority,
