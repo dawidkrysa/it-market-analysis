@@ -1,0 +1,23 @@
+name: Scrape job postings
+
+on:
+  schedule:
+    - cron: "0 4 * * *"  # daily, 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m scrapers.run_once
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SCRAPE_LEVELS: junior,mid,senior
+          LOG_FILE: ${{ runner.temp }}/app.log

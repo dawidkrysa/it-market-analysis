@@ -22,11 +22,12 @@ class Settings:
 
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
-    LOG_FILE: str = os.getenv("LOG_FILE", "/app/logs/app.log")
+    LOG_FILE: str = os.getenv("LOG_FILE", str(BASE_DIR / "logs" / "app.log"))
 
+    # Some providers hand out "postgres://" URLs; normalise to the scheme SQLAlchemy expects.
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL", "postgresql://CHANGE_ME:CHANGE_ME@db:5432/CHANGE_ME"
-    )
+    ).replace("postgres://", "postgresql://", 1)
 
     ADMIN_KEY: str = os.getenv("ADMIN_KEY", "CHANGE_ME")
 
