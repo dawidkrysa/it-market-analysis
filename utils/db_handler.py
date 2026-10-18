@@ -586,6 +586,8 @@ class DatabaseHandler:
         """
         session: Session = self.Session()
         now = datetime.now(UTC)
+        # A source may list the same offer twice (e.g. overlapping pages); keep the last copy.
+        jobs_data = list({job["ID"]: job for job in jobs_data}.values())
         try:
             for job in jobs_data:
                 job_posting = JobPosting(
