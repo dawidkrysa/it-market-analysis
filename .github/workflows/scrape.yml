@@ -4,11 +4,6 @@ on:
   schedule:
     - cron: "0 4 * * *"  # daily, 04:00 UTC
   workflow_dispatch:
-  # Temporary: lets the workflow run from this branch before it is merged to main
-  # (workflow_dispatch/schedule only work from the default branch). Remove on merge.
-  push:
-    branches: [feature/railway-deploy]
-    paths: [.github/workflows/scrape.yml]
 
 jobs:
   scrape:
