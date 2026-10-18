@@ -632,17 +632,16 @@ class DatabaseHandler:
             for job in jobs_data
         ]
         try:
+            table = JobPosting.__table__
             for start in range(0, len(rows), self.SAVE_BATCH_SIZE):
-                stmt = pg_insert(JobPosting)
+                # One multi-row VALUES statement per batch (Core, not the ORM bulk path),
+                # so each batch is exactly one round-trip to the database.
+                stmt = pg_insert(table).values(rows[start : start + self.SAVE_BATCH_SIZE])
                 stmt = stmt.on_conflict_do_update(
                     index_elements=["id"],
-                    set_={
-                        col.name: stmt.excluded[col.name]
-                        for col in JobPosting.__table__.columns
-                        if col.name != "id"
-                    },
+                    set_={c.name: stmt.excluded[c.name] for c in table.columns if c.name != "id"},
                 )
-                session.execute(stmt, rows[start : start + self.SAVE_BATCH_SIZE])
+                session.execute(stmt)
                 logger.info(
                     "Saved %s/%s postings",
                     min(start + self.SAVE_BATCH_SIZE, len(rows)),
