@@ -6,6 +6,7 @@ to save, retrieve, clean, and analyze job market data.
 """
 
 import enum
+import logging
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -21,6 +22,8 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.pool import NullPool
 
 from config.settings import Settings
+
+logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
@@ -564,6 +567,16 @@ class DatabaseHandler:
             database_url,
             # Validate pooled connections, so a DB restart/idle cutoff doesn't surface as errors.
             pool_pre_ping=True,
+            # Fail fast on a dead TCP connection instead of waiting forever for a reply
+            # (seen with a remote DB from CI: the server sat in ClientRead, the client hung).
+            connect_args={
+                "connect_timeout": 15,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5,
+                "tcp_user_timeout": 120_000,
+            },
             **({"poolclass": NullPool} if Settings.DB_NULL_POOL else {}),
         )
         self.Session: sessionmaker[Session] = sessionmaker(bind=self.engine)
@@ -630,6 +643,11 @@ class DatabaseHandler:
                     },
                 )
                 session.execute(stmt, rows[start : start + self.SAVE_BATCH_SIZE])
+                logger.info(
+                    "Saved %s/%s postings",
+                    min(start + self.SAVE_BATCH_SIZE, len(rows)),
+                    len(rows),
+                )
             session.commit()
             return len(rows)
         except Exception as e:

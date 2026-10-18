@@ -45,7 +45,9 @@ def run_scrape_job(trigger: str, experience_levels: str) -> ScrapeResult:
     db.create_tables()
 
     # The lock lives as long as this connection, so keep it open for the whole run.
-    with db.engine.connect() as lock_conn:
+    # Autocommit keeps it "idle" rather than "idle in transaction" while the scrape runs,
+    # so servers/poolers that cut long-open transactions leave it alone.
+    with db.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as lock_conn:
         acquired = lock_conn.execute(
             text("SELECT pg_try_advisory_lock(:key)"), {"key": SCRAPE_LOCK_KEY}
         ).scalar()
