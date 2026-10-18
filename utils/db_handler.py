@@ -14,6 +14,7 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import Column, DateTime, Engine, Float, Integer, String, Text, create_engine
 from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import Session
@@ -545,6 +546,9 @@ class DatabaseHandler:
         ]
     )
 
+    # Rows per upsert statement in save_jobs.
+    SAVE_BATCH_SIZE: int = 1000
+
     def __init__(self, database_url: str = Settings.DATABASE_URL) -> None:
         """
         Initialize the database handler.
@@ -572,8 +576,9 @@ class DatabaseHandler:
         """
         Save or update job postings in the database.
 
-        Utilizes the 'merge' operation to handle both inserts of new jobs
-        and updates of existing jobs based on the primary key (job ID).
+        Uses a bulk PostgreSQL upsert (INSERT ... ON CONFLICT DO UPDATE) in batches, so new
+        jobs are inserted and existing ones (same primary key, the job ID) are refreshed with
+        a handful of round-trips instead of one query per job.
 
         Args:
             jobs_data (List[dict[str, Any]]): List of job dictionaries with required fields.
@@ -588,45 +593,45 @@ class DatabaseHandler:
         now = datetime.now(UTC)
         # A source may list the same offer twice (e.g. overlapping pages); keep the last copy.
         jobs_data = list({job["ID"]: job for job in jobs_data}.values())
+        rows = [
+            {
+                "id": job["ID"],
+                "stanowisko": job["Stanowisko"],
+                "firma": job["Firma"],
+                "poziom": job["Poziom"],
+                "kategoria": job["Kategoria"],
+                "technologie": job["Technologie"],
+                "lokalizacja": job["Lokalizacja"],
+                "wynagrodzenie_uop_od": job["Wynagrodzenie UoP Od"] or None,
+                "wynagrodzenie_uop_do": job["Wynagrodzenie UoP Do"] or None,
+                "wynagrodzenie_b2b_od": job["Wynagrodzenie B2B Od"] or None,
+                "wynagrodzenie_b2b_do": job["Wynagrodzenie B2B Do"] or None,
+                "wynagrodzenie_godzinowe_od": job["Wynagrodzenie Godzinowe Od"] or None,
+                "wynagrodzenie_godzinowe_do": job["Wynagrodzenie Godzinowe Do"] or None,
+                "waluta": job["Waluta"],
+                "utworzono": job["Utworzono"],
+                "zaktualizowano": job["Zaktualizowano"],
+                "data_pobrania": now,
+                # Refreshed on every re-scrape: "age at last observation".
+                "scraped_at": now,
+                "source": job["Source"].strip().upper() if job.get("Source") else None,
+            }
+            for job in jobs_data
+        ]
         try:
-            for job in jobs_data:
-                job_posting = JobPosting(
-                    id=job["ID"],
-                    stanowisko=job["Stanowisko"],
-                    firma=job["Firma"],
-                    poziom=job["Poziom"],
-                    kategoria=job["Kategoria"],
-                    technologie=job["Technologie"],
-                    lokalizacja=job["Lokalizacja"],
-                    wynagrodzenie_uop_od=job["Wynagrodzenie UoP Od"]
-                    if job["Wynagrodzenie UoP Od"]
-                    else None,  # type: ignore
-                    wynagrodzenie_uop_do=job["Wynagrodzenie UoP Do"]
-                    if job["Wynagrodzenie UoP Do"]
-                    else None,  # type: ignore
-                    wynagrodzenie_b2b_od=job["Wynagrodzenie B2B Od"]
-                    if job["Wynagrodzenie B2B Od"]
-                    else None,  # type: ignore
-                    wynagrodzenie_b2b_do=job["Wynagrodzenie B2B Do"]
-                    if job["Wynagrodzenie B2B Do"]
-                    else None,  # type: ignore
-                    wynagrodzenie_godzinowe_od=job["Wynagrodzenie Godzinowe Od"]
-                    if job["Wynagrodzenie Godzinowe Od"]
-                    else None,  # type: ignore
-                    wynagrodzenie_godzinowe_do=job["Wynagrodzenie Godzinowe Do"]
-                    if job["Wynagrodzenie Godzinowe Do"]
-                    else None,  # type: ignore
-                    waluta=job["Waluta"],
-                    utworzono=job["Utworzono"],
-                    zaktualizowano=job["Zaktualizowano"],
-                    data_pobrania=now,
-                    # Refreshed on every re-scrape: "age at last observation".
-                    scraped_at=now,
-                    source=job["Source"].strip().upper() if job.get("Source") else None,
+            for start in range(0, len(rows), self.SAVE_BATCH_SIZE):
+                stmt = pg_insert(JobPosting)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["id"],
+                    set_={
+                        col.name: stmt.excluded[col.name]
+                        for col in JobPosting.__table__.columns
+                        if col.name != "id"
+                    },
                 )
-                session.merge(job_posting)
+                session.execute(stmt, rows[start : start + self.SAVE_BATCH_SIZE])
             session.commit()
-            return len(jobs_data)
+            return len(rows)
         except Exception as e:
             session.rollback()
             raise e
