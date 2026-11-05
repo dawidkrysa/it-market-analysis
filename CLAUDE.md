@@ -60,4 +60,5 @@ Admin access is a single shared-secret pattern (`Settings.ADMIN_KEY`), not user 
 ## Git workflow
 
 - New functionality starts on its own branch; merge to `main` only after the user has tested it. Don't merge straight to `main`.
+- No AI attribution: never add `Co-Authored-By: Claude ...` trailers to commits or "Generated with Claude Code" lines to PR descriptions.
 - Commit messages follow Conventional Commits style: `type: description` or `type(scope): description` (e.g. `feat(db): ...`, `fix: ...`, `perf: ...`). Never leave literal placeholder/boilerplate text (e.g. "Here is a summarized commit message...") as the actual commit title.
