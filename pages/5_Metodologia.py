@@ -26,6 +26,12 @@ def format_local(ts: datetime) -> str:
 
 st.set_page_config(page_title="Zarządzanie Danymi", page_icon=":material/database:", layout="wide")
 
+# Self-guard: hiding this page from st.navigation is not enough on a public deploy, so the
+# page refuses to render (and never touches the DB) without an admin session.
+if not st.session_state.get("is_admin", False):
+    st.error("Brak dostępu. Ta strona wymaga zalogowania w Panelu Dostępu.", icon=":material/lock:")
+    st.stop()
+
 st.title("Ekstrakcja i Zarządzanie Danymi")
 st.markdown("""
 Ta sekcja to centrum dowodzenia silnika danych aplikacji **Radar Mikro-Nisz**. 
