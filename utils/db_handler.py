@@ -311,6 +311,10 @@ def level_niche_metrics(df_exploded: pd.DataFrame, poziomy: list[str]) -> pd.Dat
 # Components of the niche score: column -> human-readable meaning. Each is ranked as a
 # percentile among the candidate niches (higher = better for the candidate) and the
 # score is their plain average, so no single component dominates (docs/specs/SPEC-03).
+# Below this many salary observations a niche median is flagged as unreliable and the niche
+# is ranked after all reliable ones (project convention: flag n < 10).
+NICHE_RELIABLE_N = 10
+
 NICHE_SCORE_COMPONENTS: dict[str, str] = {
     "Udzial_Ofert_Poziomu": "otwartość na wybrany poziom",
     "Mediana_Zarobkow": "płaca",
@@ -566,6 +570,8 @@ class DatabaseHandler:
             "tech-savvy",
             "zaangażowanie",
             "zdolności analityczne",
+            "analityczne myślenie",
+            "myślenie analityczne",
             "ai interest",
             # Tools and methodologies (considered generic for this algorithm)
             "agile",
@@ -1180,8 +1186,10 @@ class DatabaseHandler:
             max_jobs (int): Maximum threshold for total job postings (avoids saturated markets).
 
         Returns:
-            pd.DataFrame: Filtered niches with a `Wynik_Niszy` column (0-100, see
-                `_niche_score`), sorted best first; ties broken by median salary.
+            pd.DataFrame: Filtered niches with `Wynik_Niszy` (0-100, see `_niche_score`)
+                and `Wiarygodna` (median backed by >= NICHE_RELIABLE_N salary observations).
+                Reliable niches come first, then by score, then by median salary - so a
+                niche with a handful of offers can't top the ranking over a reliable one.
         """
         viable = df[
             (df["Liczba_Ofert"] >= min_jobs)
@@ -1189,8 +1197,11 @@ class DatabaseHandler:
             & (df["Procent_Ofert_Z_Widelkami"] >= self.MIN_SALARY_TRANSPARENCY_PERCENT)
         ].copy()
         viable["Wynik_Niszy"] = _niche_score(viable)
+        viable["Wiarygodna"] = viable["Liczba_Ofert_Z_Widelkami"] >= NICHE_RELIABLE_N
         return viable.sort_values(
-            by=["Wynik_Niszy", "Mediana_Zarobkow"], ascending=[False, False], na_position="last"
+            by=["Wiarygodna", "Wynik_Niszy", "Mediana_Zarobkow"],
+            ascending=[False, False, False],
+            na_position="last",
         )
 
     def get_blue_ocean_niches(
