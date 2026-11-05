@@ -156,6 +156,38 @@ class ScrapeRun(Base):
     error = Column(Text, nullable=True)
 
 
+class Feedback(Base):
+    """
+    SQLAlchemy model for one piece of in-app user feedback.
+
+    Attributes:
+        id: Auto-incrementing row identifier.
+        created_at: UTC timestamp of submission.
+        strona: Title of the page the form was sent from.
+        perspektywa: Who the user is: "kandydat", "firma" or "inne".
+        ocena: Did the app help with a decision: "tak", "częściowo" or "nie".
+        komentarz: Optional free-text comment (truncated to FEEDBACK_MAX_COMMENT chars).
+    """
+
+    __tablename__: str = "feedback"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    strona = Column(Text, nullable=True)
+    perspektywa = Column(Text, nullable=True)
+    ocena = Column(Text, nullable=False)
+    komentarz = Column(Text, nullable=True)
+
+
+FEEDBACK_MAX_COMMENT = 1000
+# Global spam cap: at most this many feedback rows per rolling hour, across all users.
+FEEDBACK_MAX_PER_HOUR = 30
+
+
+class FeedbackRateLimitError(Exception):
+    """Raised when the global hourly feedback limit has been reached."""
+
+
 def __normalize_company_name(name: str) -> str:
     """
     Standardize and clean corporate names for accurate deduplication.
@@ -249,6 +281,65 @@ def _aggregate_niche_metrics(df: pd.DataFrame) -> pd.DataFrame:
         )
         .reset_index()
     )
+
+
+def level_niche_metrics(df_exploded: pd.DataFrame, poziomy: list[str]) -> pd.DataFrame:
+    """
+    Per-technology niche metrics computed only from offers at the selected levels.
+
+    Args:
+        df_exploded (pd.DataFrame): Exploded (offer x technology) frame for all levels,
+            with a "Poziom" column.
+        poziomy (list[str]): Selected level codes (e.g. ["JUNIOR"]).
+
+    Returns:
+        pd.DataFrame: Output of `_aggregate_niche_metrics` for the selected levels plus
+            `Udzial_Ofert_Poziomu` - the share (%) of all of a technology's offers that are
+            at the selected levels ("how open is this technology to someone at my level").
+    """
+    at_level = df_exploded[df_exploded["Poziom"].astype(str).isin(poziomy)]
+    if at_level.empty:
+        return pd.DataFrame()
+    metrics = _aggregate_niche_metrics(at_level)
+    total_offers = df_exploded.groupby("Technologia_Pojedyncza")["ID"].count()
+    metrics["Udzial_Ofert_Poziomu"] = (
+        metrics["Liczba_Ofert"] / metrics["Technologia_Pojedyncza"].map(total_offers) * 100
+    ).round(1)
+    return metrics
+
+
+# Components of the niche score: column -> human-readable meaning. Each is ranked as a
+# percentile among the candidate niches (higher = better for the candidate) and the
+# score is their plain average, so no single component dominates (docs/specs/SPEC-03).
+NICHE_SCORE_COMPONENTS: dict[str, str] = {
+    "Udzial_Ofert_Poziomu": "otwartość na wybrany poziom",
+    "Mediana_Zarobkow": "płaca",
+    "Wzgledny_Wiek_Ogloszen": "trudność obsadzenia",
+}
+
+
+def _niche_score(df: pd.DataFrame) -> pd.Series:
+    """
+    Composite 0-100 niche score: mean percentile rank of the score components.
+
+    A component missing from `df` or constant across it (e.g. the level share when all
+    levels are selected, where it is 100% for every technology) carries no information
+    and is left out.
+
+    Args:
+        df (pd.DataFrame): Niche metrics already filtered to viable niches.
+
+    Returns:
+        pd.Series: Score per row (NaN if no component is usable).
+    """
+    ranks = [
+        df[col].rank(pct=True) * 100
+        for col in NICHE_SCORE_COMPONENTS
+        if col in df and df[col].nunique(dropna=True) > 1
+    ]
+    if not ranks:
+        return pd.Series(float("nan"), index=df.index)
+    return pd.concat(ranks, axis=1).mean(axis=1, skipna=True).round(1)
 
 
 def _calculate_market_time(df: pd.DataFrame) -> pd.DataFrame:
@@ -796,6 +887,71 @@ class DatabaseHandler:
         finally:
             session.close()
 
+    def save_feedback(
+        self, strona: str | None, perspektywa: str | None, ocena: str, komentarz: str | None
+    ) -> None:
+        """
+        Store one feedback submission, enforcing the global hourly limit.
+
+        Args:
+            strona (str | None): Title of the page the form was sent from.
+            perspektywa (str | None): "kandydat", "firma" or "inne".
+            ocena (str): "tak", "częściowo" or "nie".
+            komentarz (str | None): Free text; truncated to FEEDBACK_MAX_COMMENT chars.
+
+        Raises:
+            FeedbackRateLimitError: If FEEDBACK_MAX_PER_HOUR rows arrived in the last hour.
+            Exception: If the database transaction fails.
+        """
+        now = datetime.now(UTC)
+        session: Session = self.Session()
+        try:
+            recent = (
+                session.query(Feedback)
+                .filter(Feedback.created_at >= now - timedelta(hours=1))
+                .count()
+            )
+            if recent >= FEEDBACK_MAX_PER_HOUR:
+                raise FeedbackRateLimitError
+            komentarz = (komentarz or "").strip()[:FEEDBACK_MAX_COMMENT] or None
+            session.add(
+                Feedback(
+                    created_at=now,
+                    strona=strona,
+                    perspektywa=perspektywa,
+                    ocena=ocena,
+                    komentarz=komentarz,
+                )
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def get_feedback(self) -> pd.DataFrame:
+        """
+        Retrieve all feedback, newest first.
+
+        Returns:
+            pd.DataFrame: Columns Data, Strona, Perspektywa, Ocena, Komentarz.
+        """
+        df = pd.read_sql(
+            "SELECT created_at, strona, perspektywa, ocena, komentarz "
+            "FROM feedback ORDER BY created_at DESC",
+            con=self.engine,
+        )
+        return df.rename(
+            columns={
+                "created_at": "Data",
+                "strona": "Strona",
+                "perspektywa": "Perspektywa",
+                "ocena": "Ocena",
+                "komentarz": "Komentarz",
+            }
+        )
+
     def get_bootcamps(self) -> pd.DataFrame:
         """
         Retrieve all bootcamp cost/duration records.
@@ -940,6 +1096,37 @@ class DatabaseHandler:
 
         return df_raw, df_exploded, niche_analysis
 
+    @staticmethod
+    @st.cache_data(ttl=3600, max_entries=32, show_spinner=False)
+    def get_level_market_data(
+        typ_wynagrodzenia: str, poziomy: tuple[str, ...]
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """
+        Market data restricted to the selected seniority levels.
+
+        The within-portal age percentile (`Wzgledny_Wiek_Pct`) is kept as computed on the
+        whole portal, so a level's "hard to hire" signal is relative to all ads on it.
+
+        Args:
+            typ_wynagrodzenia (str): Salary type, a key of `SALARY_TYPE_COLUMNS`.
+            poziomy (tuple[str, ...]): Selected level codes (e.g. ("JUNIOR",)); a tuple so
+                the result can be cached per selection.
+
+        Returns:
+            tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: Level-filtered df_raw,
+                df_exploded and their per-technology niche metrics (see
+                `level_niche_metrics`). All empty if there is no data.
+        """
+        df_raw, df_exploded, _ = DatabaseHandler.get_cached_market_data(typ_wynagrodzenia)
+        if df_raw.empty:
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+        levels = list(poziomy)
+        raw_lvl = df_raw[df_raw["Poziom"].astype(str).isin(levels)]
+        exploded_lvl = df_exploded[df_exploded["Poziom"].astype(str).isin(levels)]
+        niches = level_niche_metrics(df_exploded, levels)
+        return raw_lvl, exploded_lvl, niches
+
     def _explode_technologies(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Tokenize and flatten the comma-separated technology strings into individual rows.
@@ -993,15 +1180,17 @@ class DatabaseHandler:
             max_jobs (int): Maximum threshold for total job postings (avoids saturated markets).
 
         Returns:
-            pd.DataFrame: Filtered DataFrame sorted by profitability and data transparency.
+            pd.DataFrame: Filtered niches with a `Wynik_Niszy` column (0-100, see
+                `_niche_score`), sorted best first; ties broken by median salary.
         """
-        return df[
+        viable = df[
             (df["Liczba_Ofert"] >= min_jobs)
             & (df["Liczba_Ofert"] <= max_jobs)
             & (df["Procent_Ofert_Z_Widelkami"] >= self.MIN_SALARY_TRANSPARENCY_PERCENT)
-        ].sort_values(
-            by=["Mediana_Zarobkow", "Procent_Ofert_Z_Widelkami", "Wzgledny_Wiek_Ogloszen"],
-            ascending=[False, False, True],
+        ].copy()
+        viable["Wynik_Niszy"] = _niche_score(viable)
+        return viable.sort_values(
+            by=["Wynik_Niszy", "Mediana_Zarobkow"], ascending=[False, False], na_position="last"
         )
 
     def get_blue_ocean_niches(

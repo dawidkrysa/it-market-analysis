@@ -6,9 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Streamlit multi-page web app (Python 3.13) for Polish IT job-market analysis: scrapes job postings from JustJoin.it, NoFluffJobs, and TheProtocol.it, stores them in PostgreSQL via SQLAlchemy, and serves views for candidates ("blue ocean" niche radar, statistical verification with correlations/OLS, ROI calculator) and for employers (`pages/6_Dla_Firm.py`: salary benchmark, hiring difficulty, competition, job-ad hints). Pages are registered explicitly in `app.py` via `st.navigation` (not the `pages/` auto-discovery). See `README.md` for background.
 
-## Running the app
+**Goal and scope** (decided with the user, recorded in `docs/specs/README.md`): semester project + portfolio piece. The core problem is juniors not finding work, and this semester's scope is widened to mid/senior. Candidates and employers are equally important audiences. Until the defence (~2026-12-05) prioritise stabilisation and docs over new features. New work is specified as small `docs/specs/SPEC-NN-*.md` files. In-repo docs are the source for the defence report and presentation, so keep README/specs in sync with behaviour changes.
 
-Everything runs through Docker Compose; there is no bare `streamlit run` workflow documented.
+## Deployment (production)
+
+The public demo runs on free tiers, on purpose: **Streamlit Community Cloud** (deploys `main`, secrets `DATABASE_URL` with Neon `-pooler` host and `ADMIN_KEY`), **Neon** Postgres, and **GitHub Actions** cron (`.github/workflows/scrape.yml` → `python -m scrapers.run_once`). The `scraper-scheduler` service exists only in Docker Compose. Railway was tried and dropped. Both the app and Neon cold-start after idling, and the team wakes the demo manually before presenting.
+
+## Running the app locally
+
+Locally everything runs through Docker Compose; there is no bare `streamlit run` workflow documented.
 
 ```bash
 docker-compose up --build                               # standard run (app + db + scraper-scheduler)
@@ -42,6 +48,8 @@ These encode fixes for real data problems — keep them when touching scrapers o
 - **Salaries are split by contract form**: `wynagrodzenie_uop_*` (gross monthly), `wynagrodzenie_b2b_*` (net monthly), `wynagrodzenie_godzinowe_*` (hourly, any contract form). Never mix them: analyses pick one via `SALARY_TYPE_COLUMNS` / the "Typ wynagrodzenia" selector, and `_prepare_salary_data` resolves the generic `Wynagrodzenie Od/Do` + `Srednia_Kwota` (range midpoint) for the chosen type. Only PLN amounts are kept. Implausible values (posting errors, e.g. hourly rates entered as monthly) are dropped via `PLAUSIBLE_SALARY_RANGE`.
 - **Portal quirks the scrapers handle**: JustJoinIT needs cursor pagination (`from`) and repeated `experienceLevels` params; its `publishedAt` is the latest "bump" while the original date is the earlier `lastPublishedAt`; day/year rates use the API's monthly-equivalent `from`/`to`. NoFluffJobs needs a browser User-Agent (403 otherwise) and exposes no hourly rates. Every source stores **one row per offer** (first location only), not one per city.
 - **Ad age is not comparable across portals in raw days** (NoFluffJobs/TheProtocol re-date ads ~every 30 days, JustJoinIT keeps the original date). Use the within-portal percentile `Wzgledny_Wiek_Pct` (per offer) / `Wzgledny_Wiek_Ogloszen` (median per technology); compare raw days only within a portal. `scraped_at` is refreshed on every save, so age = age at last observation.
+- **Experience level on candidate pages**: Radar, Weryfikacja and ROI render `utils.ui.level_selector()` (default Junior, persisted across pages via a non-widget session-state key) and read data through `DatabaseHandler.get_level_market_data(typ, tuple(poziomy))`, not the all-levels `get_cached_market_data`. Entry-level selections (`is_entry_level`) use lower niche-size slider defaults. `Dla Firm` keeps its own level multiselect (default all three levels).
+- **Niche score** (`docs/specs/SPEC-03`): `level_niche_metrics` adds `Udzial_Ofert_Poziomu` (share of a tech's offers at the selected levels). `_filter_viable_niches` adds `Wynik_Niszy`, the mean percentile of openness, median pay and ad-age percentile (hiring difficulty), and sorts by it. A component that is constant (openness when all levels are selected) or missing is skipped. Apply the `n` filter **before** `_filter_viable_niches`, so the score ranks only the niches that are shown.
 - **Statistics**: always report n; flag estimates with fewer than 10 observations; prefer medians with bootstrap CIs; per-technology observations share offers (not independent), so treat borderline p-values with caution. `Liczba_Ofert_Z_Widelkami` is the n behind a niche median.
 - **ROI calculator**: payback uses the monthly surplus over the user's living cost (entered manually, kept in session state); bootcamp data lives in the `bootcamp_data` table, managed from the admin panel's "Bootcampy" tab (the notebook is only an optional initial import).
 
@@ -53,9 +61,13 @@ These encode fixes for real data problems — keep them when touching scrapers o
 - Use `@st.cache_data(show_spinner=False)` / `@st.cache_resource` for expensive analysis/queries (the default cache spinner is deliberately hidden).
 - **UI style**: no colourful emoji in titles, tabs, buttons or messages; use plain words for status (e.g. "wysoka / średnia / niska") and monochrome Material icons (`:material/...:`) where an icon is needed.
 
-## Admin auth gotcha
+## Admin auth
 
-Admin access is a single shared-secret pattern (`Settings.ADMIN_KEY`), not user accounts. `app.py` sets `st.session_state.is_admin` after a sidebar password check, then conditionally adds the admin page to `st.navigation`. **Admin pages do not self-guard** — e.g. `pages/5_Metodologia.py` has no internal auth check and relies entirely on not being registered in the nav when `is_admin` is `False`. If you add a new admin-only page or route, don't assume nav-gating is sufficient protection — be aware there's no page-level check today.
+Admin access is a single shared-secret pattern (`Settings.ADMIN_KEY`), not user accounts. `app.py` sets `st.session_state.is_admin` after a sidebar password check, then conditionally adds the admin page to `st.navigation`. Nav-gating alone is not protection on the public deploy, so `pages/5_Metodologia.py` also **self-guards**: its first statement after `set_page_config` checks `is_admin` and calls `st.stop()`. Any new admin-only page must do the same before touching the DB.
+
+## User feedback
+
+`utils.ui.feedback_form()` is rendered from `app.py` (before `pg.run()`, since pages may `st.stop()`) into the sidebar of every page and saves to the `feedback` table via `DatabaseHandler.save_feedback`. Spam limits: one submission per session, at least 10 s after session start, and `FEEDBACK_MAX_PER_HOUR` globally (raises `FeedbackRateLimitError`). The table is created on demand via `create_tables()`. The admin panel's "Opinie" tab lists the feedback. AppTest quirk: under `st.navigation`, app.py-level sidebar elements vanish from the tree after a rerun, so test the submit flow with `AppTest.from_function` calling `feedback_form` directly.
 
 ## Git workflow
 

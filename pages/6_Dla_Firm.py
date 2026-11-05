@@ -14,11 +14,10 @@ from scipy import stats
 
 from utils.charts import palette
 from utils.db_handler import SALARY_TYPE_COLUMNS, DatabaseHandler
-from utils.ui import salary_type_selector
+from utils.ui import LEVEL_LABELS, salary_type_selector
 
 BOOTSTRAP_RESAMPLES = 2000
 RELIABLE_N = 10  # below this many observations a statistic is flagged as unreliable
-LEVEL_LABELS = {"TRAINEE": "Trainee", "JUNIOR": "Junior", "MID": "Mid", "SENIOR": "Senior"}
 
 
 def bootstrap_median_ci(values: np.ndarray, alpha: float = 0.05) -> tuple[float, float]:

@@ -14,7 +14,13 @@ from scipy import stats
 
 from utils.charts import palette
 from utils.db_handler import DatabaseHandler
-from utils.ui import salary_type_selector
+from utils.ui import (
+    available_levels,
+    is_entry_level,
+    level_selector,
+    levels_label,
+    salary_type_selector,
+)
 
 # --- Configuration and Header ---
 st.title("Analiza Korelacji: Niszowość vs Wynagrodzenia")
@@ -65,12 +71,28 @@ typ_wynagrodzenia, jednostka_label = salary_type_selector()
 pal = palette()
 jest_stawka_godzinowa = typ_wynagrodzenia == "Stawka godzinowa"
 
+try:
+    df_all, _, _ = DatabaseHandler.get_cached_market_data(typ_wynagrodzenia)
+except Exception as e:
+    st.error(f"Błąd: {e}")
+    st.stop()
+if df_all.empty:
+    st.warning("Baza danych jest pusta - uruchom scraping w panelu administracyjnym.")
+    st.stop()
+
+poziomy = level_selector(available_levels(df_all))
+if not poziomy:
+    st.info("Wybierz co najmniej jeden poziom doświadczenia w panelu bocznym.")
+    st.stop()
+# Lower niche-size defaults at entry level (see docs/specs/SPEC-02).
+entry = is_entry_level(poziomy)
+
 st.sidebar.markdown("### Wielkość rynku")
 min_jobs = st.sidebar.slider(
     "Min. liczba ofert (wiarygodność)",
     1,
     50,
-    10,
+    5 if entry else 10,
     1,
     help="Odrzuca technologie, które pojawiły się np. tylko raz (literówki, błędy).",
 )
@@ -78,7 +100,7 @@ max_jobs = st.sidebar.slider(
     "Max. liczba ofert (nasycenie)",
     30,
     300,
-    150,
+    80 if entry else 150,
     10,
     help="Górny limit niszy. Powyżej tej wartości zaczyna się 'Czerwony Ocean' (duża konkurencja).",
 )
@@ -122,8 +144,8 @@ else:
 # --- Data Retrieval and Filtering ---
 with st.spinner("Szybkie filtrowanie danych..."):
     try:
-        df_raw, df_exploded, niche_analysis = DatabaseHandler.get_cached_market_data(
-            typ_wynagrodzenia
+        df_raw, df_exploded, niche_analysis = DatabaseHandler.get_level_market_data(
+            typ_wynagrodzenia, tuple(poziomy)
         )
         if not niche_analysis.empty:
             df_niches = db._filter_viable_niches(niche_analysis, min_jobs, max_jobs)
@@ -208,7 +230,8 @@ def fit_ols(x: pd.Series, y: pd.Series) -> dict:
 st.markdown("---")
 st.header("0. Statystyki Opisowe")
 st.caption(
-    f"Policzone na {len(correlation_data)} technologiach spełniających aktualne filtry w panelu bocznym."
+    f"Policzone na {len(correlation_data)} technologiach spełniających aktualne filtry w panelu "
+    f"bocznym, z ofert na poziomach: **{levels_label(poziomy)}** ({len(df_raw)} ofert)."
 )
 
 desc_source = correlation_data[["Liczba_Ofert", "Mediana_Zarobkow", "Wzgledny_Wiek_Ogloszen"]]

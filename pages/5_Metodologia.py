@@ -26,6 +26,12 @@ def format_local(ts: datetime) -> str:
 
 st.set_page_config(page_title="Zarządzanie Danymi", page_icon=":material/database:", layout="wide")
 
+# Self-guard: hiding this page from st.navigation is not enough on a public deploy, so the
+# page refuses to render (and never touches the DB) without an admin session.
+if not st.session_state.get("is_admin", False):
+    st.error("Brak dostępu. Ta strona wymaga zalogowania w Panelu Dostępu.", icon=":material/lock:")
+    st.stop()
+
 st.title("Ekstrakcja i Zarządzanie Danymi")
 st.markdown("""
 Ta sekcja to centrum dowodzenia silnika danych aplikacji **Radar Mikro-Nisz**. 
@@ -89,12 +95,13 @@ if "action_msg" in st.session_state:
 
 
 # --- Tabs ---
-tab_status, tab_fetch, tab_view, tab_bootcamps, tab_clear = st.tabs(
+tab_status, tab_fetch, tab_view, tab_bootcamps, tab_feedback, tab_clear = st.tabs(
     [
         "Status bazy",
         "Pobieranie danych",
         "Przeglądarka danych",
         "Bootcampy",
+        "Opinie",
         "Czyszczenie bazy",
     ]
 )
@@ -320,7 +327,40 @@ with tab_bootcamps:
             st.error(f"Błąd zapisu: {e}")
 
 # ==========================================
-# TAB 5: Clear Database
+# TAB 5: User Feedback
+# ==========================================
+with tab_feedback:
+    st.subheader("Opinie użytkowników")
+    st.caption(
+        "Zbierane formularzem „Twoja opinia” w panelu bocznym (jedna na sesję, limit "
+        "globalny na godzinę). Miernik kryterium sukcesu „realni użytkownicy”."
+    )
+    try:
+        df_feedback = db_handler.get_feedback()
+    except Exception as e:
+        st.error(f"Nie udało się wczytać opinii: {e}")
+        df_feedback = pd.DataFrame()
+
+    if df_feedback.empty:
+        st.info("Brak opinii.")
+    else:
+        fcol1, fcol2, fcol3 = st.columns(3)
+        fcol1.metric("Liczba opinii", len(df_feedback))
+        helped = (df_feedback["Ocena"] == "tak").mean() * 100
+        fcol2.metric("Odpowiedź „pomogło”", f"{helped:.0f}%")
+        fcol3.metric("Z komentarzem", int(df_feedback["Komentarz"].notna().sum()))
+        st.markdown("**Oceny według perspektywy**")
+        st.dataframe(
+            pd.crosstab(
+                df_feedback["Perspektywa"].fillna("brak"), df_feedback["Ocena"], margins=True
+            ),
+            width="stretch",
+        )
+        df_feedback["Data"] = pd.to_datetime(df_feedback["Data"], utc=True).map(format_local)
+        st.dataframe(df_feedback, width="stretch", hide_index=True)
+
+# ==========================================
+# TAB 6: Clear Database
 # ==========================================
 with tab_clear:
     st.subheader("Opcje Administracyjne")

@@ -1,5 +1,5 @@
 """
-Run a single scrape and exit - the entry point for scheduled jobs (e.g. a Railway cron service).
+Run a single scrape and exit - the entry point for scheduled jobs (the GitHub Actions cron).
 
     python -m scrapers.run_once
 
