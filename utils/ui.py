@@ -5,12 +5,21 @@ Sidebar order across pages: "Typ wynagrodzenia" first, then "Poziom doświadczen
 (candidate pages), then page-specific filters.
 """
 
+import logging
+import time
 from collections.abc import Iterable
 
 import pandas as pd
 import streamlit as st
 
-from utils.db_handler import SALARY_TYPE_COLUMNS
+from utils.db_handler import (
+    FEEDBACK_MAX_COMMENT,
+    SALARY_TYPE_COLUMNS,
+    DatabaseHandler,
+    FeedbackRateLimitError,
+)
+
+logger = logging.getLogger(__name__)
 
 # Display labels for the seniority levels stored in job_postings.poziom, in career order.
 LEVEL_LABELS: dict[str, str] = {
@@ -84,8 +93,10 @@ def level_selector(levels: list[str]) -> list[str]:
         list[str]: The selected level codes; empty if the user cleared the selection.
     """
     stored = st.session_state.get(_LEVELS_STATE_KEY, DEFAULT_LEVELS)
-    if _LEVELS_WIDGET_KEY not in st.session_state:
-        st.session_state[_LEVELS_WIDGET_KEY] = [lvl for lvl in stored if lvl in levels]
+    # Re-seed the widget from the persistent key on every render: after a page switch the
+    # widget is a new instance (widget IDs are per page) and would otherwise start empty.
+    # A user edit updates the persistent key in on_change before this runs, so it sticks.
+    st.session_state[_LEVELS_WIDGET_KEY] = [lvl for lvl in stored if lvl in levels]
 
     st.sidebar.markdown("### Poziom doświadczenia")
     return st.sidebar.multiselect(
@@ -113,6 +124,78 @@ def is_entry_level(levels: Iterable[str]) -> bool:
     """
     levels = set(levels)
     return bool(levels) and levels <= ENTRY_LEVELS
+
+
+FEEDBACK_RATINGS: dict[str, str] = {"tak": "Tak", "częściowo": "Częściowo", "nie": "Nie"}
+FEEDBACK_PERSPECTIVES: dict[str, str] = {"kandydat": "Kandydat", "firma": "Firma", "inne": "Inne"}
+# Bots submit within moments of loading the page; people need a while to look around.
+FEEDBACK_MIN_SECONDS = 10
+
+
+@st.cache_resource(show_spinner=False)
+def _ensure_tables() -> None:
+    """Create missing tables (incl. `feedback`) once per server process."""
+    DatabaseHandler().create_tables()
+
+
+def feedback_form(page_title: str | None) -> None:
+    """
+    Render the "Twoja opinia" sidebar form shown on every page.
+
+    Spam protection: one submission per browser session, a minimum time between the
+    session's start and the submission, and a global hourly cap enforced in the DB
+    (`DatabaseHandler.save_feedback`). DB errors are shown as a message, never raised,
+    so a broken DB cannot take the page down.
+
+    Args:
+        page_title (str | None): Title of the current page, stored with the feedback.
+    """
+    st.session_state.setdefault("_session_started_at", time.monotonic())
+
+    with st.sidebar.expander("Twoja opinia", icon=":material/rate_review:"):
+        if st.session_state.get("_feedback_sent"):
+            st.success("Dziękujemy za opinię.")
+            return
+
+        with st.form("feedback_form", border=False):
+            ocena = st.radio(
+                "Czy aplikacja pomogła Ci podjąć decyzję?",
+                options=list(FEEDBACK_RATINGS),
+                format_func=FEEDBACK_RATINGS.get,
+                index=None,
+            )
+            perspektywa = st.radio(
+                "Korzystasz jako:",
+                options=list(FEEDBACK_PERSPECTIVES),
+                format_func=FEEDBACK_PERSPECTIVES.get,
+                index=None,
+                horizontal=True,
+            )
+            komentarz = st.text_area(
+                "Komentarz (opcjonalnie):", max_chars=FEEDBACK_MAX_COMMENT, height=100
+            )
+            submitted = st.form_submit_button("Wyślij")
+
+        if not submitted:
+            return
+        if ocena is None:
+            st.warning("Zaznacz odpowiedź na pytanie, czy aplikacja pomogła.")
+            return
+        if time.monotonic() - st.session_state["_session_started_at"] < FEEDBACK_MIN_SECONDS:
+            st.warning("Rozejrzyj się chwilę po aplikacji i spróbuj ponownie.")
+            return
+        try:
+            _ensure_tables()
+            DatabaseHandler().save_feedback(page_title, perspektywa, ocena, komentarz)
+        except FeedbackRateLimitError:
+            st.warning("Przyjęliśmy ostatnio bardzo dużo opinii. Spróbuj ponownie za godzinę.")
+            return
+        except Exception:
+            logger.exception("Saving feedback failed")
+            st.error("Nie udało się zapisać opinii. Spróbuj ponownie później.")
+            return
+        st.session_state["_feedback_sent"] = True
+        st.rerun()
 
 
 def levels_label(levels: Iterable[str]) -> str:

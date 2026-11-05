@@ -156,6 +156,38 @@ class ScrapeRun(Base):
     error = Column(Text, nullable=True)
 
 
+class Feedback(Base):
+    """
+    SQLAlchemy model for one piece of in-app user feedback.
+
+    Attributes:
+        id: Auto-incrementing row identifier.
+        created_at: UTC timestamp of submission.
+        strona: Title of the page the form was sent from.
+        perspektywa: Who the user is: "kandydat", "firma" or "inne".
+        ocena: Did the app help with a decision: "tak", "częściowo" or "nie".
+        komentarz: Optional free-text comment (truncated to FEEDBACK_MAX_COMMENT chars).
+    """
+
+    __tablename__: str = "feedback"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    strona = Column(Text, nullable=True)
+    perspektywa = Column(Text, nullable=True)
+    ocena = Column(Text, nullable=False)
+    komentarz = Column(Text, nullable=True)
+
+
+FEEDBACK_MAX_COMMENT = 1000
+# Global spam cap: at most this many feedback rows per rolling hour, across all users.
+FEEDBACK_MAX_PER_HOUR = 30
+
+
+class FeedbackRateLimitError(Exception):
+    """Raised when the global hourly feedback limit has been reached."""
+
+
 def __normalize_company_name(name: str) -> str:
     """
     Standardize and clean corporate names for accurate deduplication.
@@ -854,6 +886,71 @@ class DatabaseHandler:
             raise
         finally:
             session.close()
+
+    def save_feedback(
+        self, strona: str | None, perspektywa: str | None, ocena: str, komentarz: str | None
+    ) -> None:
+        """
+        Store one feedback submission, enforcing the global hourly limit.
+
+        Args:
+            strona (str | None): Title of the page the form was sent from.
+            perspektywa (str | None): "kandydat", "firma" or "inne".
+            ocena (str): "tak", "częściowo" or "nie".
+            komentarz (str | None): Free text; truncated to FEEDBACK_MAX_COMMENT chars.
+
+        Raises:
+            FeedbackRateLimitError: If FEEDBACK_MAX_PER_HOUR rows arrived in the last hour.
+            Exception: If the database transaction fails.
+        """
+        now = datetime.now(UTC)
+        session: Session = self.Session()
+        try:
+            recent = (
+                session.query(Feedback)
+                .filter(Feedback.created_at >= now - timedelta(hours=1))
+                .count()
+            )
+            if recent >= FEEDBACK_MAX_PER_HOUR:
+                raise FeedbackRateLimitError
+            komentarz = (komentarz or "").strip()[:FEEDBACK_MAX_COMMENT] or None
+            session.add(
+                Feedback(
+                    created_at=now,
+                    strona=strona,
+                    perspektywa=perspektywa,
+                    ocena=ocena,
+                    komentarz=komentarz,
+                )
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def get_feedback(self) -> pd.DataFrame:
+        """
+        Retrieve all feedback, newest first.
+
+        Returns:
+            pd.DataFrame: Columns Data, Strona, Perspektywa, Ocena, Komentarz.
+        """
+        df = pd.read_sql(
+            "SELECT created_at, strona, perspektywa, ocena, komentarz "
+            "FROM feedback ORDER BY created_at DESC",
+            con=self.engine,
+        )
+        return df.rename(
+            columns={
+                "created_at": "Data",
+                "strona": "Strona",
+                "perspektywa": "Perspektywa",
+                "ocena": "Ocena",
+                "komentarz": "Komentarz",
+            }
+        )
 
     def get_bootcamps(self) -> pd.DataFrame:
         """

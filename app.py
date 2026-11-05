@@ -7,8 +7,10 @@ and provides a global sidebar configuration.
 """
 
 import streamlit as st
-from utils.logging_config import setup_logging
+
 from config.settings import Settings
+from utils.logging_config import setup_logging
+from utils.ui import feedback_form
 
 # 1. GLOBAL CONFIGURATION (Ensure st.set_page_config is removed from all other files!)
 st.set_page_config(
@@ -105,4 +107,6 @@ if st.session_state.is_admin:
 # --- APP EXECUTION ---
 # Initialize and run the application navigation routing
 pg = st.navigation(pages_dict)
+# Rendered before pg.run(): pages may st.stop() early (e.g. empty DB), which would skip it.
+feedback_form(pg.title)
 pg.run()
