@@ -1,23 +1,25 @@
 # Radar Mikro-Nisz IT
 
-**Interactive analysis of information asymmetry in the Polish IT job market.** A Streamlit application that mines job postings scraped from industry portals to identify technology "blue oceans" — niches with high demand but low candidate supply — and statistically verifies whether the market actually pays a premium for them.
+**Interactive analysis of information asymmetry in the Polish IT job market.** A Streamlit application that mines job postings scraped from industry portals to help candidates decide **what to learn, how much to ask for and whether a bootcamp pays off**, and to show employers **what the competition offers and how to hire better** — with statistical checks on whether the "niche premium" is real.
 
-Built as part of the **Projekt Semestralny II** university course.
-**Team:** Dawid Krysa, Wojciech Pomarkiewicz, Wiktor Daniel, Krzysztof Krajewski
+Built as part of the **Projekt Semestralny II** university course and kept as a portfolio project open to further development.
+**Team:** Dawid Krysa (lead, development), Wojciech Pomarkiewicz, Wiktor Daniel, Krzysztof Krajewski (economic analysis and review)
+
+**Success criteria:** a working public demo, statistically defensible conclusions, and real users (measured with the in-app feedback form). Goals, key decisions and the pre-defence specs are recorded in [`docs/specs/`](docs/specs/README.md).
 
 ## 📖 Business context
 
-People entering the IT industry (bootcamp graduates, self-taught developers, career switchers) typically choose which technology to learn based on popularity or anecdotal opinions rather than hard market data. This drives **structural unemployment**: an oversupply of candidates in saturated "red ocean" stacks (e.g. entry-level front-end) alongside a shortage of specialists in niches that employers struggle to fill.
+The project started from one problem: **juniors can't find work.** People entering the IT industry (bootcamp graduates, self-taught developers, career switchers) typically choose which technology to learn based on popularity or anecdotal opinions rather than hard market data. This drives **structural unemployment**: an oversupply of candidates in saturated "red ocean" stacks (e.g. entry-level front-end) alongside a shortage of specialists in niches that employers struggle to fill. Employers, in turn, lack a benchmark of what other companies offer and show in their ads.
 
-Radar Mikro-Nisz addresses this with decision-support modules for candidates and for employers:
+This semester the scope was widened from juniors to **mid and senior** as well. Candidate views let you pick the experience level and default to **Junior**, the original target group. Candidates and employers are treated as equally important audiences.
 
-| Module | Business question it answers |
-|---|---|
-| 🌊 **Blue Ocean Radar** | Which technologies have many job openings but little candidate competition (deficit niches)? |
-| 📈 **Statistical Verification** | Do niche size and time-to-fill actually correlate with higher pay (Spearman/Kendall tests, OLS), or is that just an illusion? |
-| 💰 **ROI Calculator** | Does investing time and money in a specific bootcamp pay off, accounting for cost of living and forgone income? |
-| 🏢 **For Employers** (`Dla Firm`) | How much to offer for a role, how hard it will be to hire, who else is hiring the same people, and how to write the job ad? |
-| ⚙️ **Data Engine** (admin panel) | Where does the data come from, how is it refreshed/cleared, and which bootcamps feed the ROI calculator? |
+| Module | Audience | Business question it answers |
+|---|---|---|
+| 🌊 **Blue Ocean Radar** | candidates | Which technologies are open to someone at my level, pay well and are hard to fill (ads stay up long)? |
+| 📈 **Statistical Verification** | candidates | At my level, do niche size and time-to-fill actually correlate with higher pay (Spearman/Kendall tests, OLS), or is that just an illusion? |
+| 💰 **ROI Calculator** | candidates | Does investing time and money in a specific bootcamp pay off at the salary my level actually earns, accounting for cost of living? |
+| 🏢 **For Employers** (`Dla Firm`) | employers | How much to offer for a role, how hard it will be to hire, who else is hiring the same people, and how to write the job ad? |
+| ⚙️ **Data Engine** (admin panel) | team | Where does the data come from, how is it refreshed/cleared, which bootcamps feed the ROI calculator, and what do users say? |
 
 The data isn't self-reported (surveys, industry reports) — it's pulled directly from thousands of live job postings, which limits the bias typical of self-reported salary studies.
 
@@ -49,6 +51,25 @@ Every scrape — from the admin panel, the `scraper-scheduler` service or the CI
 - Each offer is stored once (first location only), even if a portal lists it in several cities.
 - Raw ad age isn't comparable across portals (some re-date ads every ~30 days), so views use a within-portal percentile instead.
 - Statistics always report `n`, flag estimates based on fewer than 10 observations and prefer medians with bootstrap confidence intervals.
+- **Experience level:** the Radar, Statistical Verification and ROI pages share one level filter in the sidebar (default Junior, remembered across pages for the session). Every figure on those pages is computed only from offers at the selected levels. With only Trainee/Junior selected, the niche-size defaults are lower (e.g. Radar: 5–40 offers instead of 15–70), because far fewer postings exist per technology.
+
+## 🔬 Methodology: what counts as a niche
+
+Job portals don't publish how many candidates apply, so candidate competition can't be measured directly. The Radar therefore scores technologies with three proxies, all computed from offers at the **selected experience levels**:
+
+| Component | Metric | What it approximates |
+|---|---|---|
+| Openness | share of the technology's offers that are at the selected levels (`Udzial_Ofert_Poziomu`) | does this technology actually hire people at my level |
+| Pay | median salary-range midpoint for the chosen salary type (`Mediana_Zarobkow`) | financial attractiveness |
+| Hiring difficulty | median within-portal ad-age percentile (`Wzgledny_Wiek_Ogloszen`) | candidate shortage — ads stay up longer |
+
+**Niche score** (`Wynik_Niszy`, 0–100) = the mean percentile rank of the three components among the technologies passing the sidebar filters (offer count range, ≥ 10% of offers with a salary range, minimum `n`). Each component has equal weight. When all levels are selected, openness is 100% for every technology and is left out of the score.
+
+**Limitations.** A long-running ad may also mean high requirements or an "always open" recruitment rather than a shortage. Offers listing several technologies feed several niches at once, so per-technology observations aren't independent. The ad-age percentile is computed per portal across all levels, so a level's hiring difficulty is relative to the whole portal. Treat the ranking as a lead to investigate, not a recommendation. The same caveats apply to the correlation tests on the Statistical Verification page.
+
+## 💬 User feedback
+
+A **"Twoja opinia"** form in the sidebar of every page asks whether the app helped with a decision (yes / partly / no), who the user is (candidate / company / other) and for an optional comment. Answers go to the `feedback` table, together with the page title, and are shown in the admin panel's **Opinie** tab. Spam protection: one submission per browser session, no submissions within the first 10 seconds of a session, at most 30 submissions per hour globally, and comments capped at 1000 characters.
 
 ## 📁 Project structure
 
@@ -75,9 +96,10 @@ Every scrape — from the admin panel, the `scraper-scheduler` service or the CI
 ├── utils/                  # Data layer, charts, UI helpers and logging
 │   ├── db_handler.py           # SQLAlchemy models + save/analytics operations
 │   ├── charts.py
-│   ├── ui.py
+│   ├── ui.py                   # Shared sidebar widgets (salary type, level filter, feedback form)
 │   └── logging_config.py
 ├── config/                 # Application configuration (environment variables)
+├── docs/specs/             # Project goal, key decisions and small feature specs
 ├── .github/workflows/
 │   └── scrape.yml           # Scheduled scraping into the production database
 ├── examples/                # Sample input data (raw API responses, cost of living, bootcamps)
@@ -130,7 +152,7 @@ The database starts empty — run a scrape (see below) to fill it.
 
 ### A note on `ADMIN_KEY`
 
-The `ADMIN_KEY` variable unlocks the admin panel (the "Data Engine" module — running scrapers, clearing the database, managing bootcamps). Set it to your own private secret; never commit the real value. Admin pages are only hidden from the navigation for non-admins — they have no page-level auth check of their own.
+The `ADMIN_KEY` variable unlocks the admin panel (the "Data Engine" module — running scrapers, clearing the database, managing bootcamps, reading feedback). Set it to your own private secret; never commit the real value. The admin page is hidden from the navigation for non-admins and also checks `st.session_state.is_admin` itself, refusing to render without an admin session.
 
 ### Development workflow
 
@@ -182,6 +204,8 @@ The public instance runs entirely on free tiers:
 | Scraping | GitHub Actions ([`scrape.yml`](.github/workflows/scrape.yml)) | Runs `python -m scrapers.run_once` at 04:00 UTC on every 3rd day of the month, or on demand via **Actions → Scrape job postings → Run workflow**. |
 
 Every push to `main` is deployed automatically, so new work goes through a feature branch first.
+
+Free tiers were chosen on purpose, to show the whole pipeline can run at zero cost. The trade-off is cold starts: both the Streamlit app and the Neon database suspend when idle, so the first visit after a pause takes noticeably longer. Before a demo, open the app once to wake it up. New tables (e.g. `feedback`) are created automatically on first use, so no manual SQL is needed after deploying this version.
 
 ### Secrets
 

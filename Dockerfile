@@ -27,7 +27,7 @@ RUN mkdir -p /app/logs && chown -R appuser:appuser /app
 
 USER appuser
 
-# Hosting platforms (e.g. Railway) inject the port to listen on via $PORT;
+# Container hosting platforms inject the port to listen on via $PORT;
 # locally it falls back to 8501.
 ENV PORT=8501     PYTHONUNBUFFERED=1     PYTHONDONTWRITEBYTECODE=1
 EXPOSE 8501

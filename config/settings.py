@@ -37,7 +37,7 @@ class Settings:
     # Postings not seen by a successful scrape for this many days are deleted (0 keeps all).
     SCRAPE_RETENTION_DAYS: int = int(os.getenv("SCRAPE_RETENTION_DAYS", "30"))
     # Open a fresh DB connection per query instead of pooling, so an idle web service
-    # holds no connections (lets Railway's serverless sleep kick in). Set to "1" to enable.
+    # holds no connections (lets a serverless DB such as Neon suspend). Set to "1" to enable.
     DB_NULL_POOL: bool = os.getenv("DB_NULL_POOL", "0") == "1"
 
     @classmethod
