@@ -7,7 +7,7 @@ Built as part of the **Projekt Semestralny II** university course and kept as a 
 
 **Success criteria:** a working public demo, statistically defensible conclusions, and real users (measured with the in-app feedback form). Goals, key decisions and the pre-defence specs are recorded in [`docs/specs/`](docs/specs/README.md).
 
-## 📖 Business context
+## Business context
 
 The project started from one problem: **juniors can't find work.** People entering the IT industry (bootcamp graduates, self-taught developers, career switchers) typically choose which technology to learn based on popularity or anecdotal opinions rather than hard market data. This drives **structural unemployment**: an oversupply of candidates in saturated "red ocean" stacks (e.g. entry-level front-end) alongside a shortage of specialists in niches that employers struggle to fill. Employers, in turn, lack a benchmark of what other companies offer and show in their ads.
 
@@ -15,15 +15,15 @@ This semester the scope was widened from juniors to **mid and senior** as well. 
 
 | Module | Audience | Business question it answers |
 |---|---|---|
-| 🌊 **Blue Ocean Radar** | candidates | Which technologies are open to someone at my level, pay well and are hard to fill (ads stay up long)? |
-| 📈 **Statistical Verification** | candidates | At my level, do niche size and time-to-fill actually correlate with higher pay (Spearman/Kendall tests, OLS), or is that just an illusion? |
-| 💰 **ROI Calculator** | candidates | Does investing time and money in a specific bootcamp pay off at the salary my level actually earns, accounting for cost of living? |
-| 🏢 **For Employers** (`Dla Firm`) | employers | How much to offer for a role, how hard it will be to hire, who else is hiring the same people, and how to write the job ad? |
-| ⚙️ **Data Engine** (admin panel) | team | Where does the data come from, how is it refreshed/cleared, which bootcamps feed the ROI calculator, and what do users say? |
+| **Blue Ocean Radar** | candidates | Which technologies are open to someone at my level, pay well and are hard to fill (ads stay up long)? |
+| **Statistical Verification** | candidates | At my level, do niche size and time-to-fill actually correlate with higher pay (Spearman/Kendall tests, OLS), or is that just an illusion? |
+| **ROI Calculator** | candidates | Does investing time and money in a specific bootcamp pay off at the salary my level actually earns, accounting for cost of living? |
+| **For Employers** (`Dla Firm`) | employers | How much to offer for a role, how hard it will be to hire, who else is hiring the same people, and how to write the job ad? |
+| **Data Engine** (admin panel) | team | Where does the data come from, how is it refreshed/cleared, which bootcamps feed the ROI calculator, and what do users say? |
 
 The data isn't self-reported (surveys, industry reports) — it's pulled directly from thousands of live job postings, which limits the bias typical of self-reported salary studies.
 
-## 🏗️ Technical architecture
+## Technical architecture
 
 - **Frontend/UI:** Streamlit (multi-page app, native `st.navigation` routing)
 - **Database:** PostgreSQL, accessed via SQLAlchemy (`utils/db_handler.py`); [Neon](https://neon.tech) in production
@@ -34,7 +34,7 @@ The data isn't self-reported (surveys, industry reports) — it's pulled directl
 - **Statistical analysis:** SciPy (Spearman/Kendall correlations), Pandas, Statsmodels
 - **Visualization:** Plotly, native Streamlit charts
 - **Containerization:** Docker + docker-compose (separate `prod`/`dev` profiles), Dev Container support (VS Code / PyCharm)
-- **Hosting:** Streamlit Community Cloud (app) + Neon (database) + GitHub Actions (scheduled scraping) — see [Deployment](#-deployment)
+- **Hosting:** Streamlit Community Cloud (app) + Neon (database) + GitHub Actions (scheduled scraping) — see [Deployment](#deployment)
 
 ### Scraper architecture
 
@@ -53,7 +53,7 @@ Every scrape — from the admin panel, the `scraper-scheduler` service or the CI
 - Statistics always report `n`, flag estimates based on fewer than 10 observations and prefer medians with bootstrap confidence intervals.
 - **Experience level:** the Radar, Statistical Verification and ROI pages share one level filter in the sidebar (default Junior, remembered across pages for the session). Every figure on those pages is computed only from offers at the selected levels. With only Trainee/Junior selected, the niche-size defaults are lower (e.g. Radar: 5–40 offers instead of 15–70), because far fewer postings exist per technology.
 
-## 🔬 Methodology: what counts as a niche
+## Methodology: what counts as a niche
 
 Job portals don't publish how many candidates apply, so candidate competition can't be measured directly. The Radar therefore scores technologies with three proxies, all computed from offers at the **selected experience levels**:
 
@@ -67,11 +67,11 @@ Job portals don't publish how many candidates apply, so candidate competition ca
 
 **Limitations.** A long-running ad may also mean high requirements or an "always open" recruitment rather than a shortage. Offers listing several technologies feed several niches at once, so per-technology observations aren't independent. The ad-age percentile is computed per portal across all levels, so a level's hiring difficulty is relative to the whole portal. Treat the ranking as a lead to investigate, not a recommendation. The same caveats apply to the correlation tests on the Statistical Verification page.
 
-## 💬 User feedback
+## User feedback
 
 A **"Twoja opinia"** form in the sidebar of every page asks whether the app helped with a decision (yes / partly / no), who the user is (candidate / company / other) and for an optional comment. Answers go to the `feedback` table, together with the page title, and are shown in the admin panel's **Opinie** tab. Spam protection: one submission per browser session, no submissions within the first 10 seconds of a session, at most 30 submissions per hour globally, and comments capped at 1000 characters.
 
-## 📁 Project structure
+## Project structure
 
 ```
 .
@@ -114,7 +114,7 @@ A **"Twoja opinia"** form in the sidebar of every page asks whether the app help
 └── README.md
 ```
 
-## 🚀 Quick start
+## Quick start
 
 ### Prerequisites
 - Docker and Docker Compose
@@ -168,7 +168,7 @@ The Dev Container configuration is in [.devcontainer/devcontainer.json](.devcont
 - Changes in `scrapers/` or `utils/` need a container restart (`docker-compose restart`); page files under `pages/` reload on their own.
 - There are no migrations: `create_tables()` only creates missing tables. After changing a model's columns, apply the matching `ALTER TABLE` to existing databases by hand.
 
-## 🛠️ Common commands
+## Common commands
 
 ```bash
 # Start the application
@@ -193,7 +193,7 @@ docker-compose exec streamlit-app pip install -r requirements.txt
 
 Scraping can also be triggered from the UI: log into the admin panel (`ADMIN_KEY`) and go to **Data Engine → Fetch data**.
 
-## 🌐 Deployment
+## Deployment
 
 The public instance runs entirely on free tiers:
 
@@ -222,7 +222,7 @@ Both strings need `?sslmode=require`. Streamlit Cloud exposes top-level secrets 
 - **TheProtocol.it returns `403` to GitHub Actions runners** (datacenter IPs are blocked), so the production database currently holds offers from JustJoin.it and NoFluffJobs only. Tracked in [#9](https://github.com/dawidkrysa/it-market-analysis/issues/9).
 - Streamlit Community Cloud can't switch the branch of an existing app — to deploy from another branch, delete the app and create it again (copy the secrets first).
 
-## 📊 Database management
+## Database management
 
 ### Open a PostgreSQL shell
 
@@ -242,7 +242,7 @@ docker-compose exec db pg_dump -U ${POSTGRES_USER:-CHANGE_ME} ${POSTGRES_DB:-CHA
 docker-compose exec db psql -U ${POSTGRES_USER:-CHANGE_ME} ${POSTGRES_DB:-CHANGE_ME} < backup.sql
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Port already in use
 
@@ -268,11 +268,11 @@ docker-compose ps
 docker-compose restart db
 ```
 
-## 📝 License
+## License
 
 MIT licensed — see [`LICENSE`](LICENSE).
 
-## 🔗 Technologies
+## Technologies
 
 - Streamlit
 - PostgreSQL + SQLAlchemy
