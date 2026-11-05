@@ -16,7 +16,12 @@ z jawnie opisanymi przybliżeniami (D5).
 `Wynik_Niszy` (0-100) to średnia percentyli trzech składników wśród nisz, które przeszły
 filtry. Każdy składnik ma tę samą wagę, a wyższy wynik oznacza lepszą niszę. Filtry
 pozostają bez zmian: liczba ofert w przedziale suwaków, transparentność ≥ 10%,
-min. n z widełkami. Ranking sortuje się po `Wynik_Niszy`.
+min. n z widełkami. Ranking sortuje się najpierw po wiarygodności (`Wiarygodna` =
+n z widełkami ≥ 10), potem po `Wynik_Niszy`.
+
+*Zmiana z 2026-11-05 po przeglądzie danych produkcyjnych:* przy progach juniorskich liderem
+była nisza z n = 4, a 12 z 15 nisz w Top 15 miało n < 10. Nisze mniej wiarygodne zostają
+widoczne (szare), ale nie mogą wyprzedzić wiarygodnych.
 
 Gdy wybrane są wszystkie poziomy, otwartość wynosi 100% dla każdej technologii. Wynik opiera
 się wtedy tylko na płacy i trudności obsadzenia, co UI zaznacza.

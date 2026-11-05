@@ -168,6 +168,10 @@ liczonymi z ofert na **wybranych poziomach doświadczenia**:
 filtry z panelu bocznego - wyższy oznacza lepszą niszę. Gdy wybrane są wszystkie poziomy,
 otwartość wynosi 100% dla każdej technologii i nie wchodzi do wyniku.
 
+**Kolejność:** najpierw nisze wiarygodne (mediana z co najmniej 10 ofert z widełkami), potem
+pozostałe - w każdej grupie według wyniku niszy. Dzięki temu nisza z kilkoma ogłoszeniami nie
+wyprzedzi niszy dobrze udokumentowanej; mniej wiarygodne nisze nadal są widoczne (szare słupki).
+
 **Ograniczenia:** długo wiszące ogłoszenie może też oznaczać wysokie wymagania albo
 rekrutację „zawsze otwartą”; jedna oferta z kilkoma technologiami zasila kilka nisz naraz.
 Ranking to wskazówka do dalszego sprawdzenia, nie gotowa rekomendacja.
@@ -190,7 +194,11 @@ else:
         delta=f"wynik {df_niches.iloc[0]['Wynik_Niszy']:.0f} / 100",
         delta_color="off",
         delta_arrow="off",
-        help="Wynik niszy: średnia percentyli otwartości, płacy i trudności obsadzenia.",
+        help=(
+            "Wynik niszy: średnia percentyli otwartości, płacy i trudności obsadzenia. "
+            "Liderem zostaje najlepsza nisza z co najmniej 10 ofertami z widełkami, "
+            "jeśli taka istnieje."
+        ),
     )
     col3.metric(
         "Mediana zarobków",
@@ -259,6 +267,10 @@ else:
             "Procent_Ofert_Z_Widelkami": "Transparentność (%)",
         },
     )
+    # Explicit ticks: on a narrow log range Plotly labels 20/30/40 as bare "2/3/4".
+    lo, hi = bubble["Liczba_Ofert"].min(), bubble["Liczba_Ofert"].max()
+    ticks = [t for t in (1, 2, 3, 5, 7, 10, 15, 20, 30, 40, 50, 70, 100, 150, 200) if lo <= t <= hi]
+    fig_map.update_xaxes(tickvals=ticks, ticktext=[str(t) for t in ticks], minor_showgrid=False)
     fig_map.add_vline(x=bubble["Liczba_Ofert"].median(), line_dash="dash", line_color="grey")
     fig_map.add_hline(y=bubble["Mediana_Zarobkow"].median(), line_dash="dash", line_color="grey")
     st.plotly_chart(fig_map, width="stretch")
@@ -267,7 +279,8 @@ else:
     st.markdown(
         f"*Słupek = mediana, wąsy = 95% przedział ufności mediany (bootstrap, "
         f"{BOOTSTRAP_RESAMPLES} losowań). Szare słupki: mniej niż {RELIABLE_N} obserwacji "
-        "płacowych - traktuj ostrożnie.*"
+        "płacowych - traktuj ostrożnie. Kolejność: najpierw nisze wiarygodne, potem pozostałe, "
+        "w każdej grupie według wyniku niszy.*"
     )
     top_15 = df_niches.head(15).copy().dropna(subset=["Mediana_Zarobkow"])
     salary_by_tech = {
@@ -328,7 +341,11 @@ else:
                 "Liczba_Ofert_Z_Widelkami": "n z widełkami",
                 "Udzial_Ofert_Poziomu": "Udział poziomu (%)",
                 "Wynik_Niszy": "Wynik niszy",
+                "Wiarygodna": "Wiarygodna (n ≥ 10)",
             }
+        )
+        formatted_df["Wiarygodna (n ≥ 10)"] = formatted_df["Wiarygodna (n ≥ 10)"].map(
+            {True: "tak", False: "nie"}
         )
         st.dataframe(formatted_df, width="stretch", hide_index=True)
 
