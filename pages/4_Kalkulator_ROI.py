@@ -27,7 +27,7 @@ def _or_zero(val: float | None) -> float:
 # --- Step 1 & 2: Loading and Preparing Data ---
 
 
-def load_market_data(typ_wynagrodzenia: str) -> tuple[pd.DataFrame, list[str]]:
+def load_market_data(typ_wynagrodzenia: str) -> tuple[pd.DataFrame, list[str] | None]:
     """
     Per-technology salary medians for the seniority levels chosen in the sidebar.
 
@@ -39,17 +39,18 @@ def load_market_data(typ_wynagrodzenia: str) -> tuple[pd.DataFrame, list[str]]:
             (one of `ROI_SALARY_TYPES`).
 
     Returns:
-        tuple[pd.DataFrame, list[str]]: Niche metrics (Technologia_Pojedyncza,
+        tuple[pd.DataFrame, list[str] | None]: Niche metrics (Technologia_Pojedyncza,
             Mediana_Zarobkow, Liczba_Ofert_Z_Widelkami, ...) for the selected levels,
-            and the selected level codes. Empty frame if there is no data.
+            and the selected level codes - `[]` if the user cleared the selection, None if
+            there is no market data (the level selector isn't shown then).
     """
     try:
         df_all, _, _ = DatabaseHandler.get_cached_market_data(typ_wynagrodzenia)
     except Exception as e:
         st.error(f"Błąd połączenia z bazą danych: {e}")
-        return pd.DataFrame(), []
+        return pd.DataFrame(), None
     if df_all.empty:
-        return pd.DataFrame(), []
+        return pd.DataFrame(), None
     poziomy = level_selector(available_levels(df_all))
     if not poziomy:
         return pd.DataFrame(), []
@@ -169,6 +170,12 @@ with calc_container:
                 f"Sugestia opiera się na mniej niż {RELIABLE_N} ofertach - traktuj ją ostrożnie "
                 "albo wpisz własną kwotę."
             )
+    elif poziomy == []:
+        # The level selector is shown but cleared: say so instead of a misleading fallback.
+        st.warning(
+            "Wybierz co najmniej jeden poziom doświadczenia w panelu bocznym, żeby kalkulator "
+            "podpowiedział zarobki z danych rynkowych (na razie przyjęto 6 000 PLN)."
+        )
     elif wybrana_technologia:
         st.caption(
             "Brak ofert z widełkami dla tej technologii na wybranych poziomach - "
