@@ -261,12 +261,53 @@ def level_niche_metrics(df_exploded: pd.DataFrame, poziomy: list[str]) -> pd.Dat
         poziomy (list[str]): Selected level codes (e.g. ["JUNIOR"]).
 
     Returns:
-        pd.DataFrame: Output of `_aggregate_niche_metrics` for the selected levels.
+        pd.DataFrame: Output of `_aggregate_niche_metrics` for the selected levels plus
+            `Udzial_Ofert_Poziomu` - the share (%) of all of a technology's offers that are
+            at the selected levels ("how open is this technology to someone at my level").
     """
     at_level = df_exploded[df_exploded["Poziom"].astype(str).isin(poziomy)]
     if at_level.empty:
         return pd.DataFrame()
-    return _aggregate_niche_metrics(at_level)
+    metrics = _aggregate_niche_metrics(at_level)
+    total_offers = df_exploded.groupby("Technologia_Pojedyncza")["ID"].count()
+    metrics["Udzial_Ofert_Poziomu"] = (
+        metrics["Liczba_Ofert"] / metrics["Technologia_Pojedyncza"].map(total_offers) * 100
+    ).round(1)
+    return metrics
+
+
+# Components of the niche score: column -> human-readable meaning. Each is ranked as a
+# percentile among the candidate niches (higher = better for the candidate) and the
+# score is their plain average, so no single component dominates (docs/specs/SPEC-03).
+NICHE_SCORE_COMPONENTS: dict[str, str] = {
+    "Udzial_Ofert_Poziomu": "otwartość na wybrany poziom",
+    "Mediana_Zarobkow": "płaca",
+    "Wzgledny_Wiek_Ogloszen": "trudność obsadzenia",
+}
+
+
+def _niche_score(df: pd.DataFrame) -> pd.Series:
+    """
+    Composite 0-100 niche score: mean percentile rank of the score components.
+
+    A component missing from `df` or constant across it (e.g. the level share when all
+    levels are selected, where it is 100% for every technology) carries no information
+    and is left out.
+
+    Args:
+        df (pd.DataFrame): Niche metrics already filtered to viable niches.
+
+    Returns:
+        pd.Series: Score per row (NaN if no component is usable).
+    """
+    ranks = [
+        df[col].rank(pct=True) * 100
+        for col in NICHE_SCORE_COMPONENTS
+        if col in df and df[col].nunique(dropna=True) > 1
+    ]
+    if not ranks:
+        return pd.Series(float("nan"), index=df.index)
+    return pd.concat(ranks, axis=1).mean(axis=1, skipna=True).round(1)
 
 
 def _calculate_market_time(df: pd.DataFrame) -> pd.DataFrame:
@@ -1042,15 +1083,17 @@ class DatabaseHandler:
             max_jobs (int): Maximum threshold for total job postings (avoids saturated markets).
 
         Returns:
-            pd.DataFrame: Filtered DataFrame sorted by profitability and data transparency.
+            pd.DataFrame: Filtered niches with a `Wynik_Niszy` column (0-100, see
+                `_niche_score`), sorted best first; ties broken by median salary.
         """
-        return df[
+        viable = df[
             (df["Liczba_Ofert"] >= min_jobs)
             & (df["Liczba_Ofert"] <= max_jobs)
             & (df["Procent_Ofert_Z_Widelkami"] >= self.MIN_SALARY_TRANSPARENCY_PERCENT)
-        ].sort_values(
-            by=["Mediana_Zarobkow", "Procent_Ofert_Z_Widelkami", "Wzgledny_Wiek_Ogloszen"],
-            ascending=[False, False, True],
+        ].copy()
+        viable["Wynik_Niszy"] = _niche_score(viable)
+        return viable.sort_values(
+            by=["Wynik_Niszy", "Mediana_Zarobkow"], ascending=[False, False], na_position="last"
         )
 
     def get_blue_ocean_niches(

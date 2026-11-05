@@ -137,8 +137,9 @@ with st.spinner("Liczenie nisz dla wybranych poziomów..."):
         typ_wynagrodzenia, tuple(poziomy)
     )
     if not niche_analysis.empty:
-        df_niches = db._filter_viable_niches(niche_analysis, min_jobs, max_jobs)
-        df_niches = df_niches[df_niches["Liczba_Ofert_Z_Widelkami"] >= min_n_salary]
+        # n filter first, so the niche score ranks only niches that are actually shown
+        enough_n = niche_analysis[niche_analysis["Liczba_Ofert_Z_Widelkami"] >= min_n_salary]
+        df_niches = db._filter_viable_niches(enough_n, min_jobs, max_jobs)
     else:
         df_niches = pd.DataFrame()
 
@@ -151,6 +152,28 @@ st.caption(
     "stronie dotyczą tylko ofert na wybranych poziomach."
 )
 
+with st.expander("Jak liczymy niszę?"):
+    st.markdown(
+        """
+Portale nie podają liczby kandydatów, więc „błękitny ocean” mierzymy trzema przybliżeniami,
+liczonymi z ofert na **wybranych poziomach doświadczenia**:
+
+| Składnik | Miara | Co przybliża |
+|---|---|---|
+| Otwartość | udział ofert technologii na wybranych poziomach we wszystkich jej ofertach | czy technologia realnie szuka ludzi z Twojego poziomu |
+| Płaca | mediana środka widełek (wybrany typ wynagrodzenia) | atrakcyjność finansowa |
+| Trudność obsadzenia | mediana względnego wieku ogłoszeń (percentyl w obrębie portalu) | niedobór kandydatów - ogłoszenia wiszą dłużej |
+
+**Wynik niszy (0-100)** to średnia percentyli tych trzech składników wśród nisz spełniających
+filtry z panelu bocznego - wyższy oznacza lepszą niszę. Gdy wybrane są wszystkie poziomy,
+otwartość wynosi 100% dla każdej technologii i nie wchodzi do wyniku.
+
+**Ograniczenia:** długo wiszące ogłoszenie może też oznaczać wysokie wymagania albo
+rekrutację „zawsze otwartą”; jedna oferta z kilkoma technologiami zasila kilka nisz naraz.
+Ranking to wskazówka do dalszego sprawdzenia, nie gotowa rekomendacja.
+"""
+    )
+
 # --- Results Presentation ---
 if df_niches is None or df_niches.empty:
     st.warning(
@@ -161,7 +184,14 @@ else:
     st.markdown("### Lider Zestawienia")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Zidentyfikowane nisze", len(df_niches))
-    col2.metric("Najlepsza technologia", df_niches.iloc[0]["Technologia_Pojedyncza"].title())
+    col2.metric(
+        "Najlepsza technologia",
+        df_niches.iloc[0]["Technologia_Pojedyncza"].title(),
+        delta=f"wynik {df_niches.iloc[0]['Wynik_Niszy']:.0f} / 100",
+        delta_color="off",
+        delta_arrow="off",
+        help="Wynik niszy: średnia percentyli otwartości, płacy i trudności obsadzenia.",
+    )
     col3.metric(
         "Mediana zarobków",
         f"{df_niches.iloc[0]['Mediana_Zarobkow']:,.0f} {unit_label}".replace(",", " "),
@@ -195,31 +225,36 @@ else:
     st.markdown("---")
     st.subheader("Mapa Nisz: popyt vs wynagrodzenie")
     st.markdown(
-        "*Oś X (skala log) = liczba ofert, oś Y = mediana płac, rozmiar = liczba ofert z "
-        "widełkami (n), kolor = względny wiek ogłoszeń (percentyl w obrębie portalu, 50 = typowe; "
-        "wyżej = ogłoszenia wiszą dłużej, czyli trudniej zrekrutować). Linie przerywane to mediany "
-        "całego zestawu - lewy górny róg to kandydaci na błękitny ocean.*"
+        "*Oś X (skala log) = liczba ofert na wybranych poziomach, oś Y = mediana płac, rozmiar = "
+        "liczba ofert z widełkami (n), kolor = wynik niszy (0-100, wyżej = lepiej; patrz „Jak "
+        "liczymy niszę?”). W podpowiedzi: udział ofert na wybranych poziomach i względny wiek "
+        "ogłoszeń (percentyl w obrębie portalu; wyżej = trudniej zrekrutować). Linie przerywane "
+        "to mediany całego zestawu.*"
     )
-    bubble = df_niches.dropna(subset=["Mediana_Zarobkow", "Wzgledny_Wiek_Ogloszen"]).copy()
+    bubble = df_niches.dropna(subset=["Mediana_Zarobkow", "Wynik_Niszy"]).copy()
     bubble["Wzgledny_Wiek_Ogloszen"] = bubble["Wzgledny_Wiek_Ogloszen"].round(0)
     fig_map = px.scatter(
         bubble,
         x="Liczba_Ofert",
         y="Mediana_Zarobkow",
         size="Liczba_Ofert_Z_Widelkami",
-        color="Wzgledny_Wiek_Ogloszen",
+        color="Wynik_Niszy",
         hover_name="Technologia_Pojedyncza",
         hover_data={
+            "Wynik_Niszy": ":.0f",
+            "Udzial_Ofert_Poziomu": ":.1f",
+            "Wzgledny_Wiek_Ogloszen": ":.0f",
             "Procent_Ofert_Z_Widelkami": ":.1f",
             "Liczba_Ofert_Z_Widelkami": True,
             "Liczba_Ofert": True,
-            "Wzgledny_Wiek_Ogloszen": ":.0f",
         },
         log_x=True,
         labels={
             "Liczba_Ofert": "Liczba ofert (log)",
             "Mediana_Zarobkow": f"Mediana ({unit_label})",
             "Liczba_Ofert_Z_Widelkami": "n z widełkami",
+            "Wynik_Niszy": "Wynik niszy",
+            "Udzial_Ofert_Poziomu": "Udział poziomu (%)",
             "Wzgledny_Wiek_Ogloszen": "Względny wiek (0-100)",
             "Procent_Ofert_Z_Widelkami": "Transparentność (%)",
         },
@@ -291,6 +326,8 @@ else:
                 "Wzgledny_Wiek_Ogloszen": "Względny wiek ogłoszeń",
                 "Procent_Ofert_Z_Widelkami": "Z widełkami (%)",
                 "Liczba_Ofert_Z_Widelkami": "n z widełkami",
+                "Udzial_Ofert_Poziomu": "Udział poziomu (%)",
+                "Wynik_Niszy": "Wynik niszy",
             }
         )
         st.dataframe(formatted_df, width="stretch", hide_index=True)
