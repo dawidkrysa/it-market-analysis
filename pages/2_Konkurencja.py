@@ -13,7 +13,13 @@ import streamlit as st
 
 from utils.charts import palette
 from utils.db_handler import DatabaseHandler
-from utils.ui import salary_type_selector
+from utils.ui import (
+    available_levels,
+    is_entry_level,
+    level_selector,
+    levels_label,
+    salary_type_selector,
+)
 
 BOOTSTRAP_RESAMPLES = 2000
 RELIABLE_N = 10  # below this many salary observations a median is flagged as shaky
@@ -56,37 +62,6 @@ st.info(
 typ_wynagrodzenia, unit_label = salary_type_selector()
 pal = palette()
 
-# --- Sidebar: User-defined parameters for niche sizing ---
-st.sidebar.markdown("### Parametry Niszy")
-min_jobs = st.sidebar.slider(
-    "Minimalna liczba ofert",
-    min_value=1,
-    max_value=50,
-    value=15,
-    step=1,
-    help="Wiarygodność rynku – odrzuca anomalie.",
-)
-max_jobs = st.sidebar.slider(
-    "Maksymalna liczba ofert",
-    min_value=30,
-    max_value=200,
-    value=70,
-    step=1,
-    help="Brak nasycenia – odrzuca 'czerwone oceany'.",
-)
-
-min_n_salary = st.sidebar.slider(
-    "Min. ofert z widełkami (n)",
-    min_value=1,
-    max_value=30,
-    value=5,
-    step=1,
-    help=(
-        "Mediana z kilku ogłoszeń jest niewiarygodna - nisze z mniejszą liczbą "
-        "obserwacji płacowych są pomijane."
-    ),
-)
-
 
 @st.cache_resource
 def get_db_handler() -> DatabaseHandler:
@@ -108,22 +83,73 @@ except Exception as e:
 # --- Data Processing: Download and analyze data with a loading spinner ---
 with st.spinner("Przetwarzanie tysięcy ofert pracy... "):
     try:
-        df_raw, df_exploded, niche_analysis = DatabaseHandler.get_cached_market_data(
-            typ_wynagrodzenia
-        )
-
-        if not niche_analysis.empty:
-            df_niches = db._filter_viable_niches(niche_analysis, min_jobs, max_jobs)
-            df_niches = df_niches[df_niches["Liczba_Ofert_Z_Widelkami"] >= min_n_salary]
-        else:
-            df_niches = pd.DataFrame()
+        df_all, _, _ = DatabaseHandler.get_cached_market_data(typ_wynagrodzenia)
     except Exception as e:
         st.error(f"Błąd: {e}")
         st.stop()
 
-if df_raw.empty or df_exploded.empty:
+if df_all.empty:
     st.warning("Baza danych jest pusta - uruchom scraping w panelu administracyjnym.")
     st.stop()
+
+poziomy = level_selector(available_levels(df_all))
+if not poziomy:
+    st.info("Wybierz co najmniej jeden poziom doświadczenia w panelu bocznym.")
+    st.stop()
+
+# Far fewer postings exist per technology at entry level, so the niche-size defaults
+# are lowered when only Trainee/Junior is selected (see docs/specs/SPEC-02).
+entry = is_entry_level(poziomy)
+
+# --- Sidebar: User-defined parameters for niche sizing ---
+st.sidebar.markdown("### Parametry Niszy")
+min_jobs = st.sidebar.slider(
+    "Minimalna liczba ofert",
+    min_value=1,
+    max_value=50,
+    value=5 if entry else 15,
+    step=1,
+    help="Wiarygodność rynku – odrzuca anomalie.",
+)
+max_jobs = st.sidebar.slider(
+    "Maksymalna liczba ofert",
+    min_value=20,
+    max_value=200,
+    value=40 if entry else 70,
+    step=1,
+    help="Brak nasycenia – odrzuca 'czerwone oceany'.",
+)
+
+min_n_salary = st.sidebar.slider(
+    "Min. ofert z widełkami (n)",
+    min_value=1,
+    max_value=30,
+    value=3 if entry else 5,
+    step=1,
+    help=(
+        "Mediana z kilku ogłoszeń jest niewiarygodna - nisze z mniejszą liczbą "
+        "obserwacji płacowych są pomijane."
+    ),
+)
+
+with st.spinner("Liczenie nisz dla wybranych poziomów..."):
+    df_raw, df_exploded, niche_analysis = DatabaseHandler.get_level_market_data(
+        typ_wynagrodzenia, tuple(poziomy)
+    )
+    if not niche_analysis.empty:
+        df_niches = db._filter_viable_niches(niche_analysis, min_jobs, max_jobs)
+        df_niches = df_niches[df_niches["Liczba_Ofert_Z_Widelkami"] >= min_n_salary]
+    else:
+        df_niches = pd.DataFrame()
+
+if df_raw.empty or df_exploded.empty:
+    st.warning("Brak ofert dla wybranych poziomów doświadczenia.")
+    st.stop()
+
+st.caption(
+    f"Poziomy: **{levels_label(poziomy)}** - {len(df_raw)} ofert. Wszystkie liczby na tej "
+    "stronie dotyczą tylko ofert na wybranych poziomach."
+)
 
 # --- Results Presentation ---
 if df_niches is None or df_niches.empty:

@@ -251,6 +251,24 @@ def _aggregate_niche_metrics(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def level_niche_metrics(df_exploded: pd.DataFrame, poziomy: list[str]) -> pd.DataFrame:
+    """
+    Per-technology niche metrics computed only from offers at the selected levels.
+
+    Args:
+        df_exploded (pd.DataFrame): Exploded (offer x technology) frame for all levels,
+            with a "Poziom" column.
+        poziomy (list[str]): Selected level codes (e.g. ["JUNIOR"]).
+
+    Returns:
+        pd.DataFrame: Output of `_aggregate_niche_metrics` for the selected levels.
+    """
+    at_level = df_exploded[df_exploded["Poziom"].astype(str).isin(poziomy)]
+    if at_level.empty:
+        return pd.DataFrame()
+    return _aggregate_niche_metrics(at_level)
+
+
 def _calculate_market_time(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate the duration each job posting has been active on the market.
@@ -939,6 +957,37 @@ class DatabaseHandler:
         df_exploded = df_exploded[EXPLODED_COLUMNS]
 
         return df_raw, df_exploded, niche_analysis
+
+    @staticmethod
+    @st.cache_data(ttl=3600, max_entries=32, show_spinner=False)
+    def get_level_market_data(
+        typ_wynagrodzenia: str, poziomy: tuple[str, ...]
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """
+        Market data restricted to the selected seniority levels.
+
+        The within-portal age percentile (`Wzgledny_Wiek_Pct`) is kept as computed on the
+        whole portal, so a level's "hard to hire" signal is relative to all ads on it.
+
+        Args:
+            typ_wynagrodzenia (str): Salary type, a key of `SALARY_TYPE_COLUMNS`.
+            poziomy (tuple[str, ...]): Selected level codes (e.g. ("JUNIOR",)); a tuple so
+                the result can be cached per selection.
+
+        Returns:
+            tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: Level-filtered df_raw,
+                df_exploded and their per-technology niche metrics (see
+                `level_niche_metrics`). All empty if there is no data.
+        """
+        df_raw, df_exploded, _ = DatabaseHandler.get_cached_market_data(typ_wynagrodzenia)
+        if df_raw.empty:
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+        levels = list(poziomy)
+        raw_lvl = df_raw[df_raw["Poziom"].astype(str).isin(levels)]
+        exploded_lvl = df_exploded[df_exploded["Poziom"].astype(str).isin(levels)]
+        niches = level_niche_metrics(df_exploded, levels)
+        return raw_lvl, exploded_lvl, niches
 
     def _explode_technologies(self, df: pd.DataFrame) -> pd.DataFrame:
         """

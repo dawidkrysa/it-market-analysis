@@ -10,11 +10,13 @@ import pandas as pd
 import streamlit as st
 
 from utils.db_handler import SALARY_TYPE_COLUMNS, DatabaseHandler
+from utils.ui import available_levels, level_selector, levels_label
 
 # The ROI formulas below treat the suggested salary as a flat monthly figure,
 # so only the two monthly-quoted salary types apply here -- hourly rates would
 # need to be converted to a monthly equivalent first to stay meaningful.
 ROI_SALARY_TYPES = [t for t in SALARY_TYPE_COLUMNS if t != "Stawka godzinowa"]
+RELIABLE_N = 10  # below this many salary observations a suggested median is flagged
 
 
 def _or_zero(val: float | None) -> float:
@@ -25,23 +27,34 @@ def _or_zero(val: float | None) -> float:
 # --- Step 1 & 2: Loading and Preparing Data ---
 
 
-@st.cache_data(show_spinner=False)
-def load_market_data(typ_wynagrodzenia: str) -> pd.DataFrame:
+def load_market_data(typ_wynagrodzenia: str) -> tuple[pd.DataFrame, list[str]]:
     """
-    Fetch aggregated market data from the database.
+    Per-technology salary medians for the seniority levels chosen in the sidebar.
+
+    No "blue ocean" filtering here: a bootcamp may teach any technology, so every
+    technology with salary data can supply a suggestion.
 
     Args:
         typ_wynagrodzenia (str): Which salary type to suggest earnings from
-            (one of `ROI_SALARY_TYPES`). Cached separately per type.
+            (one of `ROI_SALARY_TYPES`).
 
     Returns:
-        pd.DataFrame: A DataFrame containing blue ocean niche market data.
+        tuple[pd.DataFrame, list[str]]: Niche metrics (Technologia_Pojedyncza,
+            Mediana_Zarobkow, Liczba_Ofert_Z_Widelkami, ...) for the selected levels,
+            and the selected level codes. Empty frame if there is no data.
     """
-    db = DatabaseHandler()
-    df_niche = db.get_blue_ocean_niches(
-        min_jobs=5, max_jobs=1000, typ_wynagrodzenia=typ_wynagrodzenia
-    )
-    return df_niche
+    try:
+        df_all, _, _ = DatabaseHandler.get_cached_market_data(typ_wynagrodzenia)
+    except Exception as e:
+        st.error(f"Błąd połączenia z bazą danych: {e}")
+        return pd.DataFrame(), []
+    if df_all.empty:
+        return pd.DataFrame(), []
+    poziomy = level_selector(available_levels(df_all))
+    if not poziomy:
+        return pd.DataFrame(), []
+    _, _, niches = DatabaseHandler.get_level_market_data(typ_wynagrodzenia, tuple(poziomy))
+    return niches, poziomy
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -84,7 +97,7 @@ typ_wynagrodzenia = calc_container.selectbox(
     index=ROI_SALARY_TYPES.index("B2B (netto)"),
     help="Stawka godzinowa nie jest tu dostępna - kalkulator liczy w okresach miesięcznych.",
 )
-df_market = load_market_data(typ_wynagrodzenia)
+df_market, poziomy = load_market_data(typ_wynagrodzenia)
 
 st.divider()
 
@@ -124,16 +137,16 @@ with calc_container:
             ),
         )
 
-    # Suggest expected earnings based on market data median
+    # Suggest expected earnings from the market median at the selected levels
     sugerowane_zarobki = 6000.0
-    if (
-        not df_market.empty
-        and wybrana_technologia
-        and wybrana_technologia.lower() in df_market["Technologia_Pojedyncza"].str.lower().values
-    ):
-        sugerowane_zarobki = df_market[
+    n_sugestii = 0
+    if not df_market.empty and wybrana_technologia:
+        match = df_market[
             df_market["Technologia_Pojedyncza"].str.lower() == wybrana_technologia.lower()
-        ]["Mediana_Zarobkow"].iloc[0]
+        ]
+        if not match.empty and pd.notna(match["Mediana_Zarobkow"].iloc[0]):
+            sugerowane_zarobki = match["Mediana_Zarobkow"].iloc[0]
+            n_sugestii = int(match["Liczba_Ofert_Z_Widelkami"].iloc[0])
 
     szacowane_zarobki = st.number_input(
         f"Szacowane miesięczne zarobki ({typ_wynagrodzenia}) dla: "
@@ -141,8 +154,26 @@ with calc_container:
         min_value=0.0,
         value=float(sugerowane_zarobki),
         step=500.0,
-        help="Domyślna wartość opiera się na medianie zarobków w bazie danych dla tej konkretnej technologii.",
+        help=(
+            "Domyślna wartość to mediana środka widełek dla tej technologii, liczona z ofert "
+            "na poziomach wybranych w panelu bocznym."
+        ),
     )
+    if n_sugestii:
+        st.caption(
+            f"Sugestia: mediana z **{n_sugestii}** ofert z widełkami, poziomy: "
+            f"**{levels_label(poziomy)}**."
+        )
+        if n_sugestii < RELIABLE_N:
+            st.warning(
+                f"Sugestia opiera się na mniej niż {RELIABLE_N} ofertach - traktuj ją ostrożnie "
+                "albo wpisz własną kwotę."
+            )
+    elif wybrana_technologia:
+        st.caption(
+            "Brak ofert z widełkami dla tej technologii na wybranych poziomach - "
+            "wpisz własną kwotę (domyślnie 6 000 PLN)."
+        )
 
     if typ_wynagrodzenia.startswith("UoP"):
         st.caption(
