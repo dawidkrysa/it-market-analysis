@@ -38,3 +38,4 @@ użytkownicy (mierzeni formularzem opinii).
 | [SPEC-03](SPEC-03-level-niche.md) | Nisza liczona względem wybranego poziomu | SPEC-02 |
 | [SPEC-04](SPEC-04-feedback.md) | Formularz opinii | - |
 | [SPEC-05](SPEC-05-docs.md) | Aktualna dokumentacja | 01-04 |
+| [SPEC-06](SPEC-06-bootcamp-import.md) | Import bootcampów odczytuje kwoty zapisane jako tekst | - |

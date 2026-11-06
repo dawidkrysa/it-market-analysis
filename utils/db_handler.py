@@ -367,9 +367,7 @@ def _calculate_market_time(df: pd.DataFrame) -> pd.DataFrame:
     # 30 days with a new date, JustJoinIT keeps the original), so raw days aren't
     # comparable across portals. The age percentile within the ad's own portal is:
     # 50 = a typical ad on that portal, higher = up longer than most.
-    df["Wzgledny_Wiek_Pct"] = (
-        df.groupby("Source")["Czas_Na_Rynku_Dni"].rank(pct=True).mul(100)
-    )
+    df["Wzgledny_Wiek_Pct"] = df.groupby("Source")["Czas_Na_Rynku_Dni"].rank(pct=True).mul(100)
 
     return df
 
@@ -525,12 +523,28 @@ def _optimize_memory(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _to_float_or_none(val: Any) -> float | None:
-    """Coerce a data_editor cell value to float, or None if blank/unparseable."""
+    """
+    Coerce a bootcamp cell value (data_editor or imported file) to float.
+
+    Spreadsheets often store amounts as text, e.g. "2000.00 PLN", "3 870,50 zł"
+    or "Brak danych". Currency labels and spaces are stripped and a decimal
+    comma is accepted, so such values are not silently lost.
+
+    Args:
+        val (Any): Raw cell value.
+
+    Returns:
+        float | None: The parsed number, or None if blank or unparseable.
+    """
     if val is None or (isinstance(val, float) and pd.isna(val)):
         return None
-    try:
+    if isinstance(val, int | float):
         return float(val)
-    except (TypeError, ValueError):
+    text = re.sub(r"(?i)pln|zł", "", str(val))
+    text = re.sub(r"\s", "", text).replace(",", ".")
+    try:
+        return float(text)
+    except ValueError:
         return None
 
 
@@ -1163,9 +1177,7 @@ class DatabaseHandler:
         )
 
         # Exclude edge cases indicating missing data
-        df_exploded = df_exploded[
-            ~df_exploded["Technologia_Pojedyncza"].isin(["brak danych", ""])
-        ]
+        df_exploded = df_exploded[~df_exploded["Technologia_Pojedyncza"].isin(["brak danych", ""])]
 
         # Drop non-technical tags defined in the class constant
         df_exploded = df_exploded[
