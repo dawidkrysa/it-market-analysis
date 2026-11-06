@@ -234,3 +234,7 @@ Thumbs.db
 data/
 *.csv
 *.parquet
+
+# Local working documents in docs/ are not versioned; only the specs are
+/docs/*
+!/docs/specs/
